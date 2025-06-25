@@ -19,8 +19,7 @@ jobs:
        apt-get update
        apt-get install -y \
        git cmake build-essential ninja-build \
-       libfcitx5core-dev libfcitx5utils-dev libfcitx5config-dev \
-       libtoml++-dev
+       libfcitx5core-dev libfcitx5utils-dev libfcitx5config-dev
 
     - name: Checkout source
       uses: actions/checkout@v4
