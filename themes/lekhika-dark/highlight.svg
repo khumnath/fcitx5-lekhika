@@ -1,9 +1,0 @@
-<svg version="1.2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 39 39" width="39" height="39">
-	<title>highlight-svg</title>
-	<style>
-		.s0 { fill: #565050;stroke: #000000;stroke-width: .4 } 
-	</style>
-	<g id="Layer_1">
-		<path id="svg_1" class="s0" d="m0 12c0-6.6 5.4-12 12-12h15c6.6 0 12 5.4 12 12v15c0 6.6-5.4 12-12 12h-15c-6.6 0-12-5.4-12-12z"/>
-	</g>
-</svg>

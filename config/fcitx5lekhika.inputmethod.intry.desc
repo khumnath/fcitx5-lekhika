@@ -1,0 +1,9 @@
+[InputMethod]
+Name=लेखिका (Nepali Transliteration)
+UniqueName=fcitx5lekhika
+LangCode=ne
+Addon=fcitx5lekhika
+Icon=lekhika
+label=लेखिका
+Configurable=False
+

@@ -1,8 +1,37 @@
-*~
-build*/
-.*
-!.git*
-.git/
-tags
-astyle.sh
-cscope.*
+# CMake build directory
+/build/
+/CMakeFiles/
+/CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Ninja build artifacts (if using Ninja)
+/.ninja_deps
+/.ninja_log
+/build.ninja
+/rules.ninja
+
+# IDE/editor files
+*.swp
+*.swo
+*.bak
+*.tmp
+*.user
+*.kate-swp
+*.directory
+
+# Qt Creator files
+*.pro.user*
+*.qbs.user*
+
+
+# CLion or JetBrains IDEs
+.idea/
+
+# macOS
+.DS_Store
+
+
+# Tarball or release archives
+*.tar.gz
+*.zip
