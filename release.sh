@@ -25,3 +25,7 @@ cp icons/48x48/apps/*.png "$DIST_DIR/icons/48x48/apps/"
 tar -czf "$ARCHIVE_NAME" -C "$DIST_DIR" .
 
 echo "✅ Created release archive: $ARCHIVE_NAME"
+
+sed "s/VERSION=.*/VERSION=$(cat ./version.txt)/" install-template.sh > install.sh
+
+echo "✅ Update install script: $ARCHIVE_NAME"
