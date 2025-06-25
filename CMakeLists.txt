@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.10)
-project(fcitx5-lekhika)
+
+# Read version from version.txt
+file(STRINGS "${CMAKE_SOURCE_DIR}/version.txt" PROJECT_VERSION LIMIT_COUNT 1)
+project(fcitx5-lekhika VERSION ${PROJECT_VERSION})
+
 
 # Find required Fcitx5 packages
 find_package(Fcitx5Core REQUIRED)
@@ -64,5 +68,3 @@ install(
 # Add icons subdirectory for additional resources
 add_subdirectory(icons)
 install(CODE "message(STATUS \"Icons installing\")")
-
-feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)
