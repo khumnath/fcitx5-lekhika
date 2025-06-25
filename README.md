@@ -32,7 +32,7 @@ sudo pacman -S base-devel cmake fcitx5 fcitx5-configtool fcitx5-base
 
 ---
 
-## � ️ Build Instructions
+## � ️ Build Instructions
 
 ```bash
 git clone https://github.com/khumnath/fcitx5-lekhika.git
@@ -58,6 +58,7 @@ sudo make install
 curl -sL https://raw.githubusercontent.com/khumnath/fcitx5-lekhika/main/install.sh | bash
 
 ```
+need to add input method from configtool  after install.
 ---
 
 ## 🗂️ Installed File Locations
