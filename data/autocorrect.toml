@@ -1,16 +1,43 @@
+# This file contains custom words transliteration mappings.
+#
+# --- FILE FORMATTING RULES ---
+#
+# 1. Section: Rules are organized into sections, indicated by a name in square brackets [specialWords].
+#
+# 2. Comments: Any line starting with a hash symbol (#) is a comment and is ignored by the system.
+#
+# 3. Rule Format: Each rule is a key-value pair defined as:
+#      key = "value"
+#
+# 4. Key (Left side of '='): The key is the Romanized input word or sequence to be matched.
+#
+# 5. Value (Right side of '='): The value is the desired output, which must be enclosed in double quotes ("").
+#
+# 6. Mapping Types:
+#    - Roman to Roman mappings: The value is a modified Roman spelling. These are pre-transliteration substitutions.
+#      Example: 'nam' is replaced with 'naam' to enforce the long 'a' vowel sound.
+#
+#    - Roman to Devanagari mappings: The value is a direct Devanagari word. This is for irregular words or exceptions
+#      that should not follow the standard transliteration rules.
+#      Example: 'shuddha' is directly converted to 'शुद्ध'.
+#
+# 7. Special Characters: Characters like '/' can be used within the value for special logic in the transliteration engine.
+#    Example: 'ta/raaii' where / breaks letters length to ta + raaii.
+#
+# --- RULE SECTIONS ---
+#
 [specialWords]
-cha = "chha"
-chu = "chhu"
-chha = "chha"
-ma = "ma"
-aba = "aba"
+# This section contains direct substitutions for specific words.
+# The transliteration process will check these rules first.
+
+# roman to roman mappings
 nam = "naam"
 ram = "raam"
-pani = "paani"
-lai = "laaii"
-pai = "paaii"
 dai = "daaii"
 bhai = "bhaaii"
 tarai = "ta/raaii"
 taraai = "ta/raaii"
+
+# roman to nepali mappings
 shuddha = "शुद्ध"
+# TODO: Add more autocorrect words.
