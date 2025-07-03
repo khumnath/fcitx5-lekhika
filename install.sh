@@ -2,7 +2,7 @@
 set -e
 
 # This line will be replaced by the release script with the correct version
-VERSION=1.0.0
+VERSION=2.0.0
 
 REPO="khumnath/fcitx5-lekhika"
 ARCHIVE="fcitx5-lekhika-${VERSION}.tar.gz"
@@ -30,7 +30,7 @@ sudo install -d "$DATA_DIR"
 sudo install -m644 data/*.toml "$DATA_DIR"
 
 echo "🎨 Installing icon..."
-sudo install -Dm644 icons/48x48/apps/lekhika.png "$ICON_DIR/lekhika.png"
+sudo install -Dm644 icons/48x48/apps/fcitx5-lekhika.png "$ICON_DIR/fcitx5-lekhika.png"
 
 echo "✅ Installation complete! Launch 'fcitx5-configtool' to enable fcitx5-lekhika."
 
