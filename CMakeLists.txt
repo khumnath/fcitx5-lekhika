@@ -52,9 +52,8 @@ install(
 
 # Install input method descriptor 
 install(
-    FILES config/fcitx5lekhika.inputmethod.intry.desc
+    FILES config/fcitx5lekhika.conf
     DESTINATION "${FCITX_INSTALL_PKGDATADIR}/inputmethod"
-    RENAME fcitx5lekhika.conf
 )
 
 # Install runtime data files
@@ -68,3 +67,15 @@ install(
 # Add icons subdirectory for additional resources
 add_subdirectory(icons)
 install(CODE "message(STATUS \"Icons installing\")")
+
+# Add configuration files for uninstall target
+configure_file(
+    "${CMAKE_SOURCE_DIR}/cmake_uninstall.cmake.in"
+    "${CMAKE_BINARY_DIR}/cmake_uninstall.cmake"
+    IMMEDIATE @ONLY
+)
+
+add_custom_target(uninstall
+    COMMAND ${CMAKE_COMMAND} -P "${CMAKE_BINARY_DIR}/cmake_uninstall.cmake"
+)
+
