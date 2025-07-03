@@ -2,7 +2,7 @@
 set -e
 
 # This line will be replaced by the release script with the correct version
-VERSION=1.0.0
+VERSION=2.0.0
 
 REPO="khumnath/fcitx5-lekhika"
 ARCHIVE="fcitx5-lekhika-${VERSION}.tar.gz"
@@ -23,7 +23,7 @@ tar -xzf "$ARCHIVE"
 echo "🧩 Installing shared object and configuration files..."
 sudo install -Dm755 fcitx5lekhika.so "$INSTALL_DIR/fcitx5lekhika.so"
 sudo install -Dm644 config/fcitx5lekhika.addon.conf /usr/share/fcitx5/addon/fcitx5lekhika.conf
-sudo install -Dm644 config/fcitx5lekhika.inputmethod.intry.desc /usr/share/fcitx5/inputmethod/fcitx5lekhika.conf
+sudo install -Dm644 config/fcitx5lekhika.conf /usr/share/fcitx5/inputmethod/fcitx5lekhika.conf
 
 echo "🗂️ Installing transliteration data..."
 sudo install -d "$DATA_DIR"

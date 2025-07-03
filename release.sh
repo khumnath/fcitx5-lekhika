@@ -17,7 +17,7 @@ mkdir -p "$DIST_DIR"/{config,data,icons/48x48/apps}
 # Copy files
 cp "$SO_FILE" "$DIST_DIR/"
 cp config/fcitx5lekhika.addon.conf "$DIST_DIR/config/"
-cp config/fcitx5lekhika.inputmethod.intry.desc "$DIST_DIR/config/"
+cp config/fcitx5lekhika.conf "$DIST_DIR/config/"
 cp data/*.toml "$DIST_DIR/data/"
 cp icons/48x48/apps/*.png "$DIST_DIR/icons/48x48/apps/"
 
