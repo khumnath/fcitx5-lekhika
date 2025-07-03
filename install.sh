@@ -30,7 +30,7 @@ sudo install -d "$DATA_DIR"
 sudo install -m644 data/*.toml "$DATA_DIR"
 
 echo "🎨 Installing icon..."
-sudo install -Dm644 icons/48x48/apps/lekhika.png "$ICON_DIR/fcitx5-lekhika.png"
+sudo install -Dm644 icons/48x48/apps/lekhika.png "$ICON_DIR/lekhika.png"
 
 echo "✅ Installation complete! Launch 'fcitx5-configtool' to enable fcitx5-lekhika."
 
