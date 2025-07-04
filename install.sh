@@ -9,7 +9,7 @@ ARCHIVE="fcitx5-lekhika-${VERSION}.tar.gz"
 URL="https://github.com/${REPO}/releases/download/${VERSION}/${ARCHIVE}"
 
 TMPDIR=$(mktemp -d)
-INSTALL_DIR="/usr/lib/fcitx5"
+INSTALL_DIR="/usr/lib/x86_64-linux-gnu/fcitx5"
 DATA_DIR="/usr/share/fcitx5/fcitx5-lekhika"
 ICON_DIR="/usr/share/icons/hicolor/48x48/apps"
 
