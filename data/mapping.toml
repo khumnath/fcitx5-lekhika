@@ -25,13 +25,31 @@
 # Symbols:
 # Symbols are enclosed in single quotes to avoid parsing conflicts in some file formats (e.g., TOML).
 # These map specific Roman symbols to Devanagari diacritics and punctuation.
-'*' = "ं"   # Anusvara
-'**' = "ँ"  # Candrabindu
-'.' = "।"   # Purnabiram
-'\\' = "्"  # Halant (Virama)
-'/' = '/'   # Placeholder for special rule logic (e.g., in 'ta/raaii')
-'|' = "।"   # Alternative Purnabiram
-'^' = "र्‍" # Repha (re-ph)
+'*' = "ं"     # Anusvara
+'&' = "ँ"     # Candrabindu
+'.' = "।"     # Purnabiram (Devanagari danda)
+'\\' = "्"    # Halant (Virama)
+'/' = "/"     # Slash
+'|' = "।"     # Alternative Purnabiram
+'^' = "र्‍"   # Reph marker
+'@' = "@"     # At symbol
+'#' = "#"     # Hash
+'$' = "₹"     # Rupee symbol
+'%' = "%"     # Percent
+'(' = "("     # Open parenthesis
+')' = ")"     # Close parenthesis
+'{' = "{"     # Open brace
+'}' = "}"     # Close brace
+'[' = "["     # Open bracket
+']' = "]"     # Close bracket
+'+' = "+"     # Plus
+'_' = "_"     # Underscore
+'-' = "–"     # En-dash (or "-" if preferred)
+':' = ":"     # Colon
+';' = ";"     # Semicolon
+'"' = '"'     # Double quote
+"'" = "'"     # Single quote
+'~' = "~"     # Tilde
 
 # Special Words:
 # Direct mapping for specific Roman words to their Devanagari forms.

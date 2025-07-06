@@ -145,7 +145,7 @@ void NepaliRomanEngine::keyEvent(const InputMethodEntry &, KeyEvent &keyEvent) {
   if (keyEvent.key().isSimple()) {
     std::string chr = keyEvent.key().keySymToUTF8(fcitx::KeySym(sym));
 
-    static const std::string commitSymbols = R"(!@#$%^&*()-_=+[]{};:'",.<>?|\\)";
+    static const std::string commitSymbols = R"(!@#$%^()-_=+[]{};:'",.<>?|\\)";
     bool isCommitSymbol = commitSymbols.find(chr) != std::string::npos;
     bool isNumber = chr.length() == 1 && std::isdigit(chr[0]);
 
@@ -548,13 +548,22 @@ std::string NepaliRomanEngine::preprocess(const std::string &input) {
 std::string NepaliRomanEngine::preprocessInput(const std::string &input) {
   std::string out;
   out.reserve(input.size());
+  const std::string specialSymbols = "*"; // Non-space-breaking symbols
 
   for (size_t i = 0; i < input.size(); ++i) {
     char c = input[i];
     std::string symbol(1, c);
 
-    if (i > 0 && (c == '.' || c == '?' || charMap_.count(symbol)) &&
-        !std::isalnum(static_cast<unsigned char>(c)) && input[i - 1] != ' ') {
+    // Skip adding space before special symbols like "*"
+    if (specialSymbols.find(c) != std::string::npos) {
+      out += c;
+      continue;
+    }
+
+    if (i > 0 &&
+        (c == '.' || c == '?' || charMap_.count(symbol)) &&
+        !std::isalnum(static_cast<unsigned char>(c)) &&
+        input[i - 1] != ' ') {
       out += ' ';
     }
     out += c;
