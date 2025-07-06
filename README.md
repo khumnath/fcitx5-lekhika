@@ -65,7 +65,7 @@ need to add input method from configtool  after install.
 
 | File / Directory                      | Description                         |
 |--------------------------------------|-------------------------------------|
-| `/usr/lib/fcitx5/fcitx5lekhika.so`   | Input method engine shared object   |
+| `/usr/lib/x86_64-linux-gnu/fcitx5`   | Input method engine shared object   |
 | `/usr/share/fcitx5/addon/`           | Addon configuration (metadata)      |
 | `/usr/share/fcitx5/inputmethod/`     | Input method descriptor             |
 | `/usr/share/fcitx5/fcitx5-lekhika/`  | Runtime data (e.g. TOML mappings)   |
