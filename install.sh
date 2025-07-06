@@ -2,7 +2,7 @@
 set -eEuo pipefail
 
 # This line will be replaced by the release script with the correct version
-VERSION=2.0.1
+VERSION=2.0.2
 
 REPO="khumnath/fcitx5-lekhika"
 ARCHIVE="fcitx5-lekhika-${VERSION}.tar.gz"

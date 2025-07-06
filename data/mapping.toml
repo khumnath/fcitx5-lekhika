@@ -26,7 +26,7 @@
 # Symbols are enclosed in single quotes to avoid parsing conflicts in some file formats (e.g., TOML).
 # These map specific Roman symbols to Devanagari diacritics and punctuation.
 '*' = "ं"     # Anusvara
-'&' = "ँ"     # Candrabindu
+'**' = "ँ"     # Candrabindu
 '.' = "।"     # Purnabiram (Devanagari danda)
 '\\' = "्"    # Halant (Virama)
 '/' = "/"     # Slash
@@ -50,6 +50,7 @@
 '"' = '"'     # Double quote
 "'" = "'"     # Single quote
 '~' = "~"     # Tilde
+'&' = "&"     # Ampersand
 
 # Special Words:
 # Direct mapping for specific Roman words to their Devanagari forms.

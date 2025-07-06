@@ -72,8 +72,8 @@ void NepaliRomanEngine::reloadConfig() {
 }
 
 void NepaliRomanEngine::activate(const InputMethodEntry &,
-                                 InputContextEvent &event) {
-  reloadConfig();
+  InputContextEvent &) {
+reloadConfig();
 }
 
 void NepaliRomanEngine::keyEvent(const InputMethodEntry &, KeyEvent &keyEvent) {
@@ -554,7 +554,7 @@ std::string NepaliRomanEngine::preprocessInput(const std::string &input) {
     char c = input[i];
     std::string symbol(1, c);
 
-    // Skip adding space before special symbols like "*"
+    // Skip adding space before special symbols like 
     if (specialSymbols.find(c) != std::string::npos) {
       out += c;
       continue;

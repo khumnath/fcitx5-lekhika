@@ -40,7 +40,7 @@ public:
   const Configuration *getConfig() const override;
   Configuration *getMutableConfig();
   void setConfig(const RawConfig &rawConfig) override;
-  void activate(const InputMethodEntry &, InputContextEvent &event) override;
+  void activate(const InputMethodEntry &, InputContextEvent &) override;
   void deactivate(const InputMethodEntry &, InputContextEvent &event) override;
   void keyEvent(const InputMethodEntry &, KeyEvent &keyEvent) override;
   void reset(const InputMethodEntry &entry, InputContextEvent &event) override;
