@@ -238,11 +238,9 @@ void NepaliRomanEngine::updatePreedit(InputContext *ic) {
     std::string preview_full = transliterate(state->buffer_);
     std::string preview_before_cursor =
         transliterate(state->buffer_.substr(0, state->cursorPos_));
-    size_t cursor_in_preview = preview_before_cursor.length();
-
-    preview_full.insert(cursor_in_preview, "|");
-
+    size_t cursor_in_preview_bytes = preview_before_cursor.length();
     preedit.append(preview_full, TextFormatFlag::Underline);
+    preedit.setCursor(cursor_in_preview_bytes);
     ic->inputPanel().setClientPreedit(preedit);
     aux.append(state->buffer_);
     ic->inputPanel().setAuxUp(aux);
