@@ -16,7 +16,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0   
+      - name: Update metainfo
+        run: ./update-metainfo.sh
+
       - id: src
         run: |
           VER=${GITHUB_REF_NAME#v}
@@ -59,7 +62,7 @@ jobs:
             echo 'Source: fcitx5-lekhika'
             echo 'Section: utils'
             echo 'Priority: optional'
-            echo 'Maintainer: CI <ci@example.com>'
+            echo 'Maintainer: KHUMNATH CG<nath.khum@gmail.com>'
             echo 'Build-Depends: debhelper-compat (= 13), cmake, ninja-build,'
             echo ' libfcitx5core-dev, libfcitx5utils-dev, libfcitx5config-dev,'
             echo ' libsqlite3-dev, qt6-base-dev, libicu-dev, libgl-dev'
@@ -92,7 +95,7 @@ jobs:
           # rules file with real TABs, overriding the auto-test step
           printf '#!/usr/bin/make -f\n%%:\n\tdh $@ --buildsystem=cmake+ninja\noverride_dh_auto_configure:\n\tdh_auto_configure -- -DCMAKE_BUILD_TYPE=Release\noverride_dh_auto_test:\n' > debian/rules
           chmod +x debian/rules
-          export DEBEMAIL=ci@example.com DEBFULLNAME="CI Bot"
+          export DEBEMAIL=nath.khum@gmail.com DEBFULLNAME="KHUMNATH CG"
           VER=$(cat version.txt)
           dch --create -v "${VER}-1" --package fcitx5-lekhika "CI build"
           dpkg-buildpackage -b -uc -us
@@ -159,7 +162,7 @@ jobs:
             echo "%{_datadir}/applications/*.desktop"
             echo "%{_datadir}/icons/hicolor/*/apps/lekhika.*"
             echo "%changelog"
-            echo "* $(date +"%a %b %d %Y") CI <ci@example.com> - ${VER}-1"
+            echo "* $(date +"%a %b %d %Y") KHUMNATH CG <nath.khum@gmail.com> - ${VER}-1"
             echo "- Automated build"
           } > ~/rpmbuild/SPECS/fcitx5-lekhika.spec
           rpmbuild -bb ~/rpmbuild/SPECS/fcitx5-lekhika.spec

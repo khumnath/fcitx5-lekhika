@@ -1,21 +1,37 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<component type="desktop">
-  <id>lekhika-trainer.desktop</id>
+<component type="desktop-application">
+  <id>io.github.khumnath.lekhika-trainer</id>
   <name>Lekhika Trainer</name>
   <summary>Train the Lekhika input engine with Devanagari words</summary>
   <description>
     <p>
-      Lekhika Trainer is a utility for importing and learning Devanagari words
-      to enhance the autocorrection and transliteration capabilities of the
-      fcitx5-lekhika input method engine.
+      Lekhika Trainer is a graphical utility that helps users import and train Devanagari words
+      to improve the autocorrection and transliteration accuracy of the fcitx5-lekhika input method engine.
+      It supports dictionary updates, learning from user input, and integration with Fcitx5 workflows.
     </p>
   </description>
-  <launchable type="desktop-id">lekhika-trainer.desktop</launchable>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Lekhika Trainer main window</caption>
+      <image>https://raw.githubusercontent.com/khum/fcitx5-lekhika/refs/heads/main/data/Screenshot_lekhika-trainer_20250912125236.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Importing new words to the dictionary</caption>
+      <image>https://raw.githubusercontent.com/khum/fcitx5-lekhika/refs/heads/main/data/Screenshot_lekhika-trainer_20250912125316.png</image>
+    </screenshot>
+  </screenshots>
+  <launchable type="desktop-id">io.github.khumnath.lekhika-trainer.desktop</launchable>
   <icon type="stock">lekhika</icon>
+  <releases>
+    <release version="2.1.0" date="2025-09-12">
+      <description>
+        <p>refactored and first version of gui tool of fcitx5-lekhika trainer release.</p>
+      </description>
+    </release>
+  </releases>
   <categories>
     <category>Utility</category>
     <category>Education</category>
-    <category>InputMethod</category>
   </categories>
   <keywords>
     <keyword>Devanagari</keyword>
@@ -23,7 +39,12 @@
     <keyword>Trainer</keyword>
     <keyword>Fcitx5</keyword>
   </keywords>
-  <developer_name>khumnath</developer_name>
+  <content_rating type="oars-1.0" />
+  <developer id="io.github.khumnath">
+    <id>io.github.khumnath</id>
+    <name>khumnath</name>
+  </developer>
   <project_license>GPL-3.0-or-later</project_license>
+  <metadata_license>CC0-1.0</metadata_license>
   <url type="homepage">https://github.com/khumnath/fcitx5-lekhika</url>
 </component>

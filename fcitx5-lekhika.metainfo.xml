@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<component type="inputmethod">
-  <id>org.fcitx.fcitx5-lekhika</id>
+<component type="addon">
+  <id>io.github.khumnath.fcitx5-lekhika</id>
+  <extends>org.fcitx.Fcitx5.desktop</extends>
   <name>Fcitx5 Lekhika</name>
   <summary>Transliteration and autocorrection engine for Nepali Roman input</summary>
   <description>
@@ -13,17 +14,35 @@
       It supports Indic numerals, symbol transliteration, and customizable mappings.
     </p>
   </description>
-  <url type="homepage">https://github.com/khumnath/fcitx5-lekhika</url>
-  <project_license>GPL-3.0-or-later</project_license>
-  <developer_name>khumnath</developer_name>
-  <categories>
-    <category>InputMethod</category>
-    <category>Utility</category>
-  </categories>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Transliterating Romanized Nepali to Devanagari</caption>
+      <image>https://raw.githubusercontent.com/khum/fcitx5-lekhika/refs/heads/main/data/Screenshot_fcitx5-lekhika_20250912125709.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Configuration options for Lekhika</caption>
+      <image>https://raw.githubusercontent.com/khum/fcitx5-lekhika/refs/heads/main/data/Screenshot_fcitx5-config_lekhika_20250912130028.png</image>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="2.1.0" date="2025-09-12">
+      <description>
+        <p>refactored release of the input method engine.</p>
+      </description>
+    </release>
+  </releases>
   <keywords>
     <keyword>Fcitx5</keyword>
     <keyword>Nepali</keyword>
     <keyword>Transliteration</keyword>
     <keyword>Input Method</keyword>
   </keywords>
+  <content_rating type="oars-1.0" />
+  <developer id="io.github.khumnath">
+    <id>io.github.khumnath</id>
+    <name>khumnath</name>
+  </developer>
+  <project_license>GPL-3.0-or-later</project_license>
+  <metadata_license>CC0-1.0</metadata_license>
+  <url type="homepage">https://github.com/khumnath/fcitx5-lekhika</url>
 </component>
