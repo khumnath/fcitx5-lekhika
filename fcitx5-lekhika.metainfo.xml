@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="inputmethod">
+  <id>org.fcitx.fcitx5-lekhika</id>
+  <name>Fcitx5 Lekhika</name>
+  <summary>Transliteration and autocorrection engine for Nepali Roman input</summary>
+  <description>
+    <p>
+      Fcitx5 Lekhika is a plugin for the Fcitx5 input method framework. It provides
+      smart transliteration from Romanized Nepali to Devanagari, along with
+      autocorrection and dictionary-based learning features.
+    </p>
+    <p>
+      It supports Indic numerals, symbol transliteration, and customizable mappings.
+    </p>
+  </description>
+  <url type="homepage">https://github.com/khumnath/fcitx5-lekhika</url>
+  <project_license>GPL-3.0-or-later</project_license>
+  <developer_name>khumnath</developer_name>
+  <categories>
+    <category>InputMethod</category>
+    <category>Utility</category>
+  </categories>
+  <keywords>
+    <keyword>Fcitx5</keyword>
+    <keyword>Nepali</keyword>
+    <keyword>Transliteration</keyword>
+    <keyword>Input Method</keyword>
+  </keywords>
+</component>

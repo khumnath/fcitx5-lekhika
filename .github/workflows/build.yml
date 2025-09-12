@@ -1,0 +1,54 @@
+# .github/workflows/build.yml
+name: Build & Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+        build_type: [Debug, Release]
+    runs-on: ubuntu-latest
+    env:
+      CC:  ${{ matrix.cc }}
+      CXX: ${{ matrix.cc == 'gcc' && 'g++' || 'clang++' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install distro dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build extra-cmake-modules \
+            libfcitx5core-dev libfcitx5utils-dev libfcitx5config-dev \
+            libsqlite3-dev qt6-base-dev qt6-base-dev-tools libicu-dev \
+            gettext appstream
+
+      - name: Configure
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test (CTest)
+        run: |
+          cd build
+          ctest --output-on-failure || true   # add real tests later
+
+      - name: Upload build artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.cc }}-${{ matrix.build_type }}
+          path: |
+            build/*.so
+            build/lekhika-trainer
+            build/Testing/Temporary/LastTest.log

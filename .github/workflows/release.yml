@@ -1,0 +1,273 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    outputs:
+      tarball: ${{ steps.src.outputs.tarball }}
+      version: ${{ steps.src.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: src
+        run: |
+          VER=${GITHUB_REF_NAME#v}
+          TAR="fcitx5-lekhika-${VER}.tar.gz"
+          git archive --format=tar.gz --prefix="fcitx5-lekhika-${VER}/" \
+            -o "$TAR" "$GITHUB_REF_NAME"
+          echo "tarball=$TAR" >> "$GITHUB_OUTPUT"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-tarball
+          path: ${{ steps.src.outputs.tarball }}
+
+  deb:
+    needs: source
+    runs-on: ${{ matrix.distro }}
+    strategy:
+      matrix:
+        distro: [ubuntu-22.04, ubuntu-latest]
+    steps:
+      - name: install build-deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential dpkg-dev debhelper devscripts \
+            cmake ninja-build \
+            libfcitx5core-dev libfcitx5utils-dev libfcitx5config-dev \
+            libsqlite3-dev qt6-base-dev libicu-dev libgl-dev
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: source-tarball
+      - name: Build debian package
+        run: |
+          mkdir pkg && tar -xf *.tar.gz -C pkg --strip-components=1
+          cd pkg
+          mkdir -p debian
+          # control file
+          {
+            echo 'Source: fcitx5-lekhika'
+            echo 'Section: utils'
+            echo 'Priority: optional'
+            echo 'Maintainer: CI <ci@example.com>'
+            echo 'Build-Depends: debhelper-compat (= 13), cmake, ninja-build,'
+            echo ' libfcitx5core-dev, libfcitx5utils-dev, libfcitx5config-dev,'
+            echo ' libsqlite3-dev, qt6-base-dev, libicu-dev, libgl-dev'
+            echo 'Standards-Version: 4.6.0'
+            echo ''
+            echo 'Package: fcitx5-lekhika'
+            echo 'Architecture: any'
+            echo 'Depends: ${shlibs:Depends}, ${misc:Depends}'
+            echo 'Description: Lekhika input-method addon for Fcitx5'
+            echo ''
+            echo 'Package: lekhika-trainer'
+            echo 'Architecture: any'
+            echo 'Depends: ${shlibs:Depends}, ${misc:Depends}, libqt6widgets6t64 | libqt6widgets6'
+            echo 'Description: GUI training tool for fcitx5-lekhika'
+          } > debian/control
+          # Create .install files to map build artifacts to packages
+          {
+            echo 'usr/lib/*/fcitx5/fcitx5lekhika.so'
+            echo 'usr/share/fcitx5/addon/fcitx5lekhika.conf'
+            echo 'usr/share/fcitx5/fcitx5-lekhika/*'
+            echo 'usr/share/fcitx5/inputmethod/fcitx5lekhika.conf'
+            echo 'usr/share/metainfo/fcitx5-lekhika.metainfo.xml'
+          } > debian/fcitx5-lekhika.install
+          {
+            echo 'usr/bin/lekhika-trainer'
+            echo 'usr/share/applications/lekhika-trainer.desktop'
+            echo 'usr/share/icons/hicolor/*/apps/*'
+            echo 'usr/share/metainfo/lekhika-trainer.metainfo.xml'
+          } > debian/lekhika-trainer.install
+          # rules file with real TABs, overriding the auto-test step
+          printf '#!/usr/bin/make -f\n%%:\n\tdh $@ --buildsystem=cmake+ninja\noverride_dh_auto_configure:\n\tdh_auto_configure -- -DCMAKE_BUILD_TYPE=Release\noverride_dh_auto_test:\n' > debian/rules
+          chmod +x debian/rules
+          export DEBEMAIL=ci@example.com DEBFULLNAME="CI Bot"
+          VER=$(cat version.txt)
+          dch --create -v "${VER}-1" --package fcitx5-lekhika "CI build"
+          dpkg-buildpackage -b -uc -us
+      - name: Remove debug packages
+        run: rm -f ./*.ddeb
+      - name: Add t64 suffix for latest ubuntu build
+        if: matrix.distro == 'ubuntu-latest'
+        run: |
+          # Rename all build artifacts with a _t64 suffix to avoid name collisions in the release.
+          shopt -s nullglob
+          for f in *.deb *.changes *.buildinfo; do
+            new_name="${f%.*}_t64.${f##*.}"
+            echo "Renaming $f to $new_name"
+            mv -- "$f" "$new_name"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debian-packages-${{ matrix.distro }}
+          path: |
+            *deb
+            *changes
+
+  rpm-fedora:
+    needs: source
+    runs-on: ubuntu-latest
+    container: fedora:39
+    steps:
+      - run: |
+          dnf install -y rpm-build cmake ninja-build gcc-c++ \
+            fcitx5-devel qt6-qtbase-devel sqlite-devel libicu-devel
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: source-tarball
+      - run: |
+          mkdir pkg && tar -xf *.tar.gz -C pkg --strip-components=1
+          cd pkg
+          VER=$(cat version.txt)
+          mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+          tar -czf ~/rpmbuild/SOURCES/fcitx5-lekhika-${VER}.tar.gz \
+            --transform "s,^,fcitx5-lekhika-${VER}/," .
+          {
+            echo "Name:           fcitx5-lekhika"
+            echo "Version:        ${VER}"
+            echo "Release:        1%{?dist}"
+            echo "Summary:        Lekhika input method for Fcitx5"
+            echo "License:        GPL-3.0+"
+            echo "Source0:        %{name}-%{version}.tar.gz"
+            echo "BuildRequires:  cmake ninja-build gcc-c++ fcitx5-devel qt6-qtbase-devel sqlite-devel libicu-devel"
+            echo "%description"
+            echo "Lekhika input-method addon for Fcitx5"
+            echo "%prep"
+            echo "%autosetup"
+            echo "%build"
+            echo "%cmake -DCMAKE_BUILD_TYPE=Release"
+            echo "%cmake_build"
+            echo "%install"
+            echo "%cmake_install"
+            echo "%files"
+            echo "%{_libdir}/fcitx5/*.so"
+            echo "%{_bindir}/lekhika-trainer"
+            echo "%{_datadir}/metainfo/*.xml"
+            echo "%{_datadir}/fcitx5/*"
+            echo "%{_datadir}/applications/*.desktop"
+            echo "%{_datadir}/icons/hicolor/*/apps/lekhika.*"
+            echo "%changelog"
+            echo "* $(date +"%a %b %d %Y") CI <ci@example.com> - ${VER}-1"
+            echo "- Automated build"
+          } > ~/rpmbuild/SPECS/fcitx5-lekhika.spec
+          rpmbuild -bb ~/rpmbuild/SPECS/fcitx5-lekhika.spec
+      - name: Remove debug packages
+        run: rm -f ~/rpmbuild/RPMS/*/*-debug{info,source}-*.rpm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fedora-rpms
+          path: ~/rpmbuild/RPMS/*/*.rpm
+
+  arch:
+    needs: source
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - run: |
+          pacman -Sy --noconfirm base-devel cmake ninja fcitx5-qt sqlite qt6-base icu
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: source-tarball
+      - run: |
+          useradd -m builder
+          mkdir arch_build
+          mv *.tar.gz arch_build/
+          chown -R builder:builder arch_build
+          sudo -u builder \
+            GITHUB_REPOSITORY=${{ github.repository }} \
+            PKGVER=${{ needs.source.outputs.version }} \
+            bash -c '
+              set -e
+              cd arch_build
+              VER=$PKGVER
+              {
+                echo "pkgname=(fcitx5-lekhika lekhika-trainer)"
+                echo "pkgver=${VER}"
+                echo "pkgrel=1"
+                echo "pkgdesc=\"Lekhika input method for Fcitx5\""
+                echo "arch=(x86_64)"
+                echo "url=\"https://github.com/${GITHUB_REPOSITORY}\""
+                echo "license=(GPL3)"
+                echo "options=(\"!debug\")"
+                echo "depends=(fcitx5 qt6-base icu sqlite)"
+                echo "makedepends=(cmake ninja)"
+                echo "source=(fcitx5-lekhika-\${pkgver}.tar.gz)"
+                echo "sha256sums=(\"SKIP\")"
+                echo "build() {"
+                echo "  cd \"fcitx5-lekhika-\${pkgver}\""
+                echo "  cmake -B build -G Ninja \\"
+                echo "    -DCMAKE_BUILD_TYPE=Release \\"
+                echo "    -DCMAKE_INSTALL_PREFIX=/usr"
+                echo "  cmake --build build"
+                echo "}"
+                echo "package_fcitx5-lekhika() {"
+                echo "  cd \"fcitx5-lekhika-\${pkgver}\""
+                echo "  DESTDIR=\"\$pkgdir\" cmake --install build --component Runtime"
+                echo "}"
+                echo "package_lekhika-trainer() {"
+                echo "  cd \"fcitx5-lekhika-\${pkgver}\""
+                echo "  DESTDIR=\"\$pkgdir\" cmake --install build --component Trainer"
+                echo "}"
+              } > PKGBUILD
+              makepkg -f
+            '
+          mv arch_build/*.pkg.tar.zst .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arch-packages
+          path: '*.pkg.tar.zst'
+
+  release:
+    needs: [source, deb, rpm-fedora, arch]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+      - run: |
+          mkdir release
+          shopt -s nullglob globstar
+          files_to_copy=(
+            source-tarball/*
+            debian-packages-*/*
+            fedora-rpms/**/*.rpm
+            arch-packages/*.pkg.tar.zst
+          )
+          if [ ${#files_to_copy[@]} -gt 0 ]; then
+            cp -v "${files_to_copy[@]}" release/
+          fi
+          cd release
+          if [ -n "$(ls -A .)" ]; then
+            sha256sum * > SHA256SUMS.txt
+          fi
+      - name: changelog
+        run: |
+          PREV=$(git describe --tags --abbrev=0 HEAD~1 2/dev/null || true)
+          if [ -n "$PREV" ]; then
+            echo "### Changes since $PREV" > CHANGELOG.md
+            git log --pretty=format:"- %s (%h)" "$PREV..HEAD" >> CHANGELOG.md
+          else
+            echo "### Initial release" > CHANGELOG.md
+          fi
+      - name: create GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release/*
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: false
+

@@ -1,3 +1,9 @@
-install(DIRECTORY 48x48 DESTINATION "/usr/share/icons/hicolor" 
-PATTERN .* EXCLUDE 
-PATTERN *~ EXCLUDE)
+# SVG icon (scalable)
+install(FILES lekhika.svg
+    DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable/apps"
+)
+
+# PNG icon (fallback for legacy or HiDPI)
+install(FILES lekhika.png
+    DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/128x128/apps"
+)
