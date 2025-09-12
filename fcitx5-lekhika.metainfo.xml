@@ -17,17 +17,17 @@
   <screenshots>
     <screenshot type="default">
       <caption>Transliterating Romanized Nepali to Devanagari</caption>
-      <image>https://raw.githubusercontent.com/khum/fcitx5-lekhika/refs/heads/main/data/Screenshot_fcitx5-lekhika_20250912125709.png</image>
+      <image>https://raw.githubusercontent.com/khumnath/fcitx5-lekhika/main/data/Screenshot_fcitx5-lekhika_20250912125709.png</image>
     </screenshot>
     <screenshot>
       <caption>Configuration options for Lekhika</caption>
-      <image>https://raw.githubusercontent.com/khum/fcitx5-lekhika/refs/heads/main/data/Screenshot_fcitx5-config_lekhika_20250912130028.png</image>
+      <image>https://raw.githubusercontent.com/khumnath/fcitx5-lekhika/main/data/Screenshot_fcitx5-config_lekhika_20250912130028.png</image>
     </screenshot>
   </screenshots>
   <releases>
     <release version="2.1.0" date="2025-09-12">
       <description>
-        <p>refactored release of the input method engine.</p>
+        <p>Refactored release of the input method engine.</p>
       </description>
     </release>
   </releases>

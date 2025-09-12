@@ -13,11 +13,11 @@
   <screenshots>
     <screenshot type="default">
       <caption>Lekhika Trainer main window</caption>
-      <image>https://raw.githubusercontent.com/khum/fcitx5-lekhika/refs/heads/main/data/Screenshot_lekhika-trainer_20250912125236.png</image>
+      <image>https://raw.githubusercontent.com/khumnath/fcitx5-lekhika/main/data/Screenshot_lekhika-trainer_20250912125236.png</image>
     </screenshot>
     <screenshot>
       <caption>Importing new words to the dictionary</caption>
-      <image>https://raw.githubusercontent.com/khum/fcitx5-lekhika/refs/heads/main/data/Screenshot_lekhika-trainer_20250912125316.png</image>
+      <image>https://raw.githubusercontent.com/khumnath/fcitx5-lekhika/main/data/Screenshot_lekhika-trainer_20250912125316.png</image>
     </screenshot>
   </screenshots>
   <launchable type="desktop-id">io.github.khumnath.lekhika-trainer.desktop</launchable>
@@ -25,7 +25,7 @@
   <releases>
     <release version="2.1.0" date="2025-09-12">
       <description>
-        <p>refactored and first version of gui tool of fcitx5-lekhika trainer release.</p>
+        <p>Refactored and first version of gui tool of fcitx5-lekhika trainer release.</p>
       </description>
     </release>
   </releases>
