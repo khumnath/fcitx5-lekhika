@@ -99,7 +99,7 @@ add_custom_target(lekhika-extra-files
     SOURCES
         data/mapping.toml
         data/autocorrect.toml
-        data/lekhika-trainer.desktop
+        lekhika-trainer.desktop
         lekhika-trainer.metainfo.xml
         fcitx5-lekhika.metainfo.xml
         config/fcitx5lekhika.conf
