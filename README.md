@@ -1,3 +1,8 @@
+> [!NOTE]  
+> We need a valid nepali word list file with many words per line for creating good database.
+> we can train with any text file but function to filter only valid words is not complete yet.
+> if anyone wants to contribute create a file wordlist.text and send a pull request.
+
 # fcitx5-lekhika
 
 **fcitx5-lekhika** is a transliteration-based input method for [Fcitx5](https://github.com/fcitx/fcitx5 "null") focused on improving Nepali typing workflows. The project consists of two main components:
