@@ -1,3 +1,7 @@
+> [!NOTE]  
+> We need a valid nepali word list file with many words per line for creating good database.
+> we can train with any text file but function to filter only valid words is not complete yet.
+> if anyone wants to contribute create a file wordlist.text and send a pull request.
 
 # fcitx5-lekhika
 
@@ -29,6 +33,9 @@
     -   **Database Tools:** Reset the dictionary or download a pre-trained database to get started quickly.(download and replace method implemented but file is not ready)
         
     -   **Live Testing:** Configure and test transliteration rules in real-time without restarting Fcitx5.
+
+## lekhika in action
+![img](https://raw.githubusercontent.com/khumnath/fcitx5-lekhika/main/data/Screenshot_fcitx5-lekhika_20250912125709.png)
         
 
 ## 📦 Dependencies
@@ -111,6 +118,9 @@ After installation, you need to enable the input method:
 5.  Search for **"Lekhika"** and add it to the list of active input methods.
     
 6.  You can now switch to it using your configured hotkey (e.g., `Ctrl+Space`).
+
+### fcitx setting options 
+![img](https://raw.githubusercontent.com/khumnath/fcitx5-lekhika/main/data/Screenshot_fcitx5-config_lekhika_20250912130028.png)
     
 
 ### 2. Using the Dictionary Trainer
