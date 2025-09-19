@@ -77,6 +77,7 @@ class NepaliRomanState : public InputContextProperty {
 public:
     std::string buffer_;
     size_t cursorPos_ = 0;
+    bool navigatedInCandidates_ = false;
 };
 
 /* ----------  main engine  ---------- */
@@ -100,6 +101,7 @@ private:
     void updatePreedit(InputContext *ic);
     void updateCandidates(InputContext *ic, const std::string &prefix);
     void commitBuffer(NepaliRomanState *state, InputContext *ic);
+    void commitRawBuffer(NepaliRomanState *state, InputContext *ic);
     void resetState(NepaliRomanState *state, InputContext *ic);
 
     Instance *instance_;

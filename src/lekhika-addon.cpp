@@ -145,8 +145,9 @@ void NepaliRomanEngine::keyEvent(const InputMethodEntry &, KeyEvent &keyEvent) {
 
     // Candidate selection logic
     if (isCandidateListVisible) {
-        // Commit with Space if the option is enabled
-        if (sym == FcitxKey_space && spacecanCommitSuggestions_) {
+        // Commit with Space if option enabled OR user navigated in candidates
+        if (sym == FcitxKey_space &&
+            (spacecanCommitSuggestions_ || state->navigatedInCandidates_)) {
             if (candidateList->cursorIndex() >= 0) {
                 const auto &word =
                     candidateList->candidate(candidateList->cursorIndex())
@@ -154,7 +155,8 @@ void NepaliRomanEngine::keyEvent(const InputMethodEntry &, KeyEvent &keyEvent) {
                         .toString();
                 ic->commitString(word + " ");
                 resetState(state, ic);
-                keyEvent.filterAndAccept();
+                state->navigatedInCandidates_ = false; // reset after commit
+                keyEvent.filterAndAccept(); //  Consume
                 return;
             }
         }
@@ -194,23 +196,115 @@ void NepaliRomanEngine::keyEvent(const InputMethodEntry &, KeyEvent &keyEvent) {
         return;
     }
 
-    // Commit typed word on Space (if not committing suggestion) or Return
-    if (sym == FcitxKey_space || sym == FcitxKey_Return) {
-        if (!state->buffer_.empty()) {
-            std::string result =
-                transliterator_->transliterate(state->buffer_);
-            ic->commitString(result + (sym == FcitxKey_space ? " " : ""));
+    // Candidate list navigation — Up/Down only
+    if (isCandidateListVisible) {
+        auto candidateList = ic->inputPanel().candidateList();
+        if (candidateList) {
+            int currentIndex = candidateList->cursorIndex();
+            int total = candidateList->size();
 
+            if (sym == FcitxKey_Up) {
+                int newIndex = (currentIndex - 1 + total) % total;
+                static_cast<LekhikaCandidateList*>(candidateList.get())->setCursorIndex(newIndex);
+                state->navigatedInCandidates_ = true;
+                ic->updateUserInterface(UserInterfaceComponent::InputPanel);
+                keyEvent.filterAndAccept();
+                return;
+            }
+
+            if (sym == FcitxKey_Down) {
+                int newIndex = (currentIndex + 1) % total;
+                static_cast<LekhikaCandidateList*>(candidateList.get())->setCursorIndex(newIndex);
+                state->navigatedInCandidates_ = true;
+                ic->updateUserInterface(UserInterfaceComponent::InputPanel);
+                keyEvent.filterAndAccept();
+                return;
+            }
+        }
+    }
+
+    // Enter: commit candidate or transliterated buffer — only consume if we commit something
+    if (sym == FcitxKey_Return) {
+        bool committed = false;
+
+        if (isCandidateListVisible) {
+            auto candidateList = ic->inputPanel().candidateList();
+            if (candidateList && candidateList->cursorIndex() >= 0) {
+                const auto &word =
+                    candidateList->candidate(candidateList->cursorIndex())
+                        .text()
+                        .toString();
+                ic->commitString(word);
+                resetState(state, ic);
+                committed = true;
+            }
+        }
+
+        // If no candidate committed, try buffer
+        if (!committed && !state->buffer_.empty()) {
+            std::string result = transliterator_->transliterate(state->buffer_);
+            ic->commitString(result);
 #ifdef HAVE_SQLITE3
             if (dictionary_ && enableDictionaryLearning_) {
                 dictionary_->addWord(result);
             }
 #endif
             resetState(state, ic);
-        } else if (sym == FcitxKey_space) {
-            ic->commitString(" ");
+            committed = true;
         }
-        keyEvent.filterAndAccept();
+
+        // Only consume Enter if we actually committed something
+        if (committed) {
+            keyEvent.filterAndAccept();
+        }
+        // If nothing committed, key is NOT consumed → reaches app
+        return;
+    }
+
+    // Space: commit candidate if allowed, else commit buffer or insert space
+    if (sym == FcitxKey_space) {
+        if (isCandidateListVisible) {
+            auto candidateList = ic->inputPanel().candidateList();
+            if (candidateList &&
+                (spacecanCommitSuggestions_ || state->navigatedInCandidates_) &&
+                candidateList->cursorIndex() >= 0) {
+                const auto &word =
+                    candidateList->candidate(candidateList->cursorIndex())
+                        .text()
+                        .toString();
+                ic->commitString(word + " ");
+                resetState(state, ic);
+                state->navigatedInCandidates_ = false;
+                keyEvent.filterAndAccept(); // Consume
+                return;
+            }
+        }
+        // Fallback: commit buffer or insert space
+        if (!state->buffer_.empty()) {
+            std::string result = transliterator_->transliterate(state->buffer_);
+            ic->commitString(result + " ");
+#ifdef HAVE_SQLITE3
+            if (dictionary_ && enableDictionaryLearning_) {
+                dictionary_->addWord(result);
+            }
+#endif
+            resetState(state, ic);
+            //  Do NOT consume — let Space reach app
+            return;
+        } else {
+            ic->commitString(" ");
+            //  Do NOT consume — let Space reach app
+            return;
+        }
+    }
+
+    // Esc: commit raw buffer as-is (no transliteration) and reset
+    if (sym == FcitxKey_Escape) {
+        if (!state->buffer_.empty()) {
+            ic->commitString(state->buffer_);
+            resetState(state, ic);
+        }
+        keyEvent.filterAndAccept(); //  Consume — IME-specific action
         return;
     }
 
@@ -276,9 +370,17 @@ void NepaliRomanEngine::commitBuffer(NepaliRomanState *state, InputContext *ic) 
     }
 }
 
+void NepaliRomanEngine::commitRawBuffer(NepaliRomanState *state, InputContext *ic) {
+    if (!state->buffer_.empty()) {
+        ic->commitString(state->buffer_);
+        resetState(state, ic);
+    }
+}
+
 void NepaliRomanEngine::resetState(NepaliRomanState *state, InputContext *ic) {
     state->buffer_.clear();
     state->cursorPos_ = 0;
+    state->navigatedInCandidates_ = false;
     updatePreedit(ic);
 }
 
@@ -286,7 +388,7 @@ void NepaliRomanEngine::deactivate(const InputMethodEntry &,
                                    InputContextEvent &event) {
     auto *ic = event.inputContext();
     auto *state = ic->propertyFor(&factory_);
-    commitBuffer(state, ic);
+    commitRawBuffer(state, ic);
 }
 
 void NepaliRomanEngine::reset(const InputMethodEntry &entry,

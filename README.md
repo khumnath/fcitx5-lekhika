@@ -23,6 +23,19 @@
     -   Autocorrection for common typos via customizable dictionaries.
         
     -   Clean integration with the Fcitx5 input method framework.
+
+    **key functions**
+    - **space** -> commit transliterated word. if suggestion commit enabled commit first suggestion.
+      if suggestions are navigated by arrow key commits highlighted suggestion.
+    - **enter** -> commits transliterated word if no suggestions. if there are suggestions commits highlighted suggestion.
+      if navigated highlighted suggestion commit.
+    - **numbers 1-9** -> if there are suggestions commit numbered candidate on number key press, else input number.
+      if number transliteration on in settings input nepali numbers.
+    - **Esc** -> esc commits typed raw english text.
+    - **symbols** -> if symbols transliteration is on some keys like '*' '**' are transliterates ti nepali symbols.
+      full stop and question mark commits always transliterated text only not word from suggestions list.
+    - **key up down** -> navigates through suggestion list if there are any.
+    - **arrow key left right** -> changes cursor position in input buffer.
         
 -   **Dictionary Management (GUI Trainer)**
     

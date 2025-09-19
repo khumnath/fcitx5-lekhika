@@ -138,7 +138,7 @@ install(FILES
     DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/fcitx5/fcitx5-lekhika"
 )
 
-install(FILES data/lekhika-trainer.desktop
+install(FILES lekhika-trainer.desktop
     DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/applications"
 )
 
