@@ -626,7 +626,7 @@ public:
          </ol>
 
          <h2 style="font-size: 1.2em; font-weight: 600; color: #34495e;">Database Location</h2>
-         <p>Your dictionary: <code style="background: #f5f5f5; padding: 2px 4px; border-radius: 3px; font-size: 0.95em;">~/.local/share/lekhika/lekhika.db</code></p>
+         <p>Your dictionary: <code style="background: #00f5f5; padding: 2px 4px; border-radius: 3px; font-size: 0.95em;">~/.local/share/fcitx5-lekhika/lekhikadict.akshardb</code></p>
 
          <hr style="border: 0; border-top: 1px solid #eee;">
 
