@@ -791,6 +791,8 @@ public:
 
 
 private:
+    QWidget *m_statusWidget{nullptr};
+
     void updateStatusBar() {
         DictionaryManager dm;
         auto info = dm.getDatabaseInfo();
@@ -852,12 +854,14 @@ private:
         layout->setSpacing(0);
         layout->addWidget(infoLbl);
         layout->addWidget(pathLineWidget);
+        
+        if (m_statusWidget) {
+            statusBar()->removeWidget(m_statusWidget);
+            m_statusWidget->deleteLater();
+        }
 
-        statusBar()->addPermanentWidget(container, 1);
-
-
-        statusBar()->clearMessage();
-        statusBar()->addPermanentWidget(container, 1);
+        m_statusWidget = container;
+        statusBar()->addPermanentWidget(m_statusWidget, 1);
     }
 };
 #else  /* !HAVE_SQLITE3 */
