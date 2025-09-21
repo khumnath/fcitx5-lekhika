@@ -800,7 +800,7 @@ public:
 
          <h2 style="font-size: 1.2em; font-weight: 600; color: #34495e;">Tabs Overview</h2>
          <ul style="padding-left: 20px; list-style-type: disc;">
-         <li><b>Learn Words:</b> Import text files (.txt, .html) with Devanagari. Extracts valid words into your dictionary (increments frequency for existing words).</li>
+         <li><b>Learn Words:</b> Import text files (.txt) with Devanagari texts. Extracts valid words into your dictionary (increments frequency for existing words).</li>
          <li><b>Edit Dictionary:</b> View, add, delete, or reset your personal word database.</li>
          <li><b>Settings:</b> Configure & test transliteration engine settings.</li>
          <li><b>Help:</b> This guide + download pre-trained database.</li>
@@ -828,13 +828,17 @@ public:
          </div>
          )");
         helpContent_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        helpContent_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
         mainLay->addWidget(helpContent_, 1);
         dwninfo = new QLabel("If you want a head start, you can download a dictionary with pre trained common words.");
         dwninfo->setWordWrap(true);
+        dwninfo->setStyleSheet("color: red;");
         auto *group = new QGroupBox("");
         auto *groupLay = new QVBoxLayout(group);
         groupLay->addWidget(dwninfo);
         downloadBtn_ = new QPushButton("Download and Replace Database");
+        stopDownloadBtn_ = new QPushButton("Stop Download");
+        stopDownloadBtn_->setVisible(false);
         log_ = new QPlainTextEdit;
         log_->setReadOnly(true);
         log_->setMaximumHeight(80);
@@ -842,6 +846,7 @@ public:
 
         auto *btnLay = new QHBoxLayout;
         btnLay->addWidget(downloadBtn_);
+        btnLay->addWidget(stopDownloadBtn_);
         btnLay->addStretch();
 
         groupLay->addLayout(btnLay);
@@ -850,11 +855,44 @@ public:
 
         netManager_ = new QNetworkAccessManager(this);
         connect(downloadBtn_, &QPushButton::clicked, this, &HelpTab::downloadDatabase);
+        connect(stopDownloadBtn_, &QPushButton::clicked, this, &HelpTab::stopDownload);
+
+        m_downloadTimer = new QTimer(this);
+        m_downloadTimer->setSingleShot(true);
+        connect(m_downloadTimer, &QTimer::timeout, this, &HelpTab::onDownloadTimeout);
     }
 
+    void setOnDatabaseUpdateCallback(std::function<void()> callback) {
+        onDatabaseUpdate_ = callback;
+    }
 
 private:
+    void onDownloadTimeout() {
+        if (m_currentReply) {
+            log_->appendPlainText("Download timed out (no activity for 15 seconds).");
+            m_currentReply->abort();
+        }
+    }
+
+    void stopDownload() {
+        if (m_currentReply) {
+            m_downloadTimer->stop();
+            m_userStopped = true;
+            m_currentReply->abort();
+        }
+    }
+
     QLabel *dwninfo;
+    QTextEdit *helpContent_;
+    QPushButton *downloadBtn_;
+    QPushButton *stopDownloadBtn_;
+    QPlainTextEdit *log_;
+    QNetworkAccessManager *netManager_;
+    QNetworkReply *m_currentReply = nullptr;
+    std::function<void()> onDatabaseUpdate_ = nullptr;
+    QTimer *m_downloadTimer = nullptr;
+    bool m_userStopped = false;
+
     void downloadDatabase()
     {
         const QString warningText =
@@ -878,6 +916,8 @@ private:
         log_->clear();
         log_->appendPlainText("Looking for fresh dictionary…");
         downloadBtn_->setEnabled(false);
+        stopDownloadBtn_->setVisible(true);
+        m_userStopped = false;
 
         QString dirPath = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
                           + QLatin1String("/fcitx5-lekhika");
@@ -885,54 +925,101 @@ private:
         if (!dir.exists() && !dir.mkpath(".")) {
             log_->appendPlainText("Error: could not create " + dirPath);
             downloadBtn_->setEnabled(true);
+            stopDownloadBtn_->setVisible(false);
             return;
         }
 
         const QString localFile = dirPath + QLatin1String("/lekhikadict.akshardb");
         const QUrl url("https://github.com/khumnath/fcitx5-lekhika/releases/download/dictionary/lekhikadict.akshardb");
         QNetworkRequest req(url);
-        QNetworkReply *netReply = netManager_->get(req);
+        m_currentReply = netManager_->get(req);
+        m_downloadTimer->start(15000); // 15 second timeout
 
-        connect(netReply, &QNetworkReply::finished, this, [this, netReply, localFile]() {
-            if (netReply->error() != QNetworkReply::NoError) {
-                QString detail;
-                if (netReply->error() == QNetworkReply::ContentNotFoundError)
-                    detail = "Server replied: 404 – dictionary not found. database not changed.";
-                else if (netReply->error() == QNetworkReply::HostNotFoundError ||
-                         netReply->error() == QNetworkReply::TimeoutError)
-                    detail = "No internet connection.";
-                else
-                    detail = QString("Network error: %1").arg(netReply->errorString());
+        connect(m_currentReply, &QNetworkReply::downloadProgress, this, [this](qint64 bytesReceived, qint64 bytesTotal) {
+            m_downloadTimer->start(15000); // Reset timer on progress
+            if (bytesTotal > 0) {
+                QString progressText = QString::asprintf("Downloading: %.2f MB / %.2f MB",
+                                                         bytesReceived / (1024.0 * 1024.0),
+                                                         bytesTotal / (1024.0 * 1024.0));
+                QMetaObject::invokeMethod(log_, [this, progressText]() {
+                        QTextCursor cursor = log_->textCursor();
+                        cursor.movePosition(QTextCursor::End);
+                        cursor.select(QTextCursor::BlockUnderCursor);
+                        cursor.removeSelectedText();
+                        if (log_->toPlainText().endsWith('\n')) {
+                            QTextCursor cleanupCursor = log_->textCursor();
+                            cleanupCursor.movePosition(QTextCursor::End);
+                            cleanupCursor.deletePreviousChar();
+                        }
+                        log_->appendPlainText(progressText);
+                    }, Qt::QueuedConnection);
+            }
+        });
 
-                log_->appendPlainText("Download failed. " + detail);
-            } else {
-                QString tempFile = localFile + ".tmp";
-                QFile file(tempFile);
-                if (!file.open(QIODevice::WriteOnly)) {
-                    log_->appendPlainText(QString("Error: cannot write temporary file %1").arg(tempFile));
-                } else {
-                    file.write(netReply->readAll());
-                    file.close();
+        connect(m_currentReply, &QNetworkReply::finished, this, [this, localFile]() {
+            m_downloadTimer->stop();
 
-                    QFile::remove(localFile);
-                    if (QFile::rename(tempFile, localFile)) {
-                        log_->appendPlainText("Success! Dictionary updated.");
-                        log_->appendPlainText("Please restart fcitx5 to use the new dictionary. dictionary can be tested on settings tab without restart this application. ");
-                    } else {
-                        log_->appendPlainText("Error: could not replace the old dictionary file.");
-                    }
-                }
+            QNetworkReply::NetworkError error = m_currentReply->error();
+            QString errorString = m_currentReply->errorString();
+            QByteArray data;
+            if (error == QNetworkReply::NoError) {
+                data = m_currentReply->readAll();
             }
 
-            downloadBtn_->setEnabled(true);
-            netReply->deleteLater();
+            m_currentReply->deleteLater();
+            m_currentReply = nullptr;
+
+            QMetaObject::invokeMethod(this, [this, error, errorString, data, localFile]() {
+                    QTextCursor cursor = log_->textCursor();
+                    cursor.movePosition(QTextCursor::End);
+                    cursor.select(QTextCursor::BlockUnderCursor);
+                    cursor.removeSelectedText();
+                    if (!log_->toPlainText().isEmpty() && !log_->toPlainText().endsWith('\n')) {
+                        QTextCursor cleanupCursor = log_->textCursor();
+                        cleanupCursor.movePosition(QTextCursor::End);
+                        cleanupCursor.deletePreviousChar();
+                    }
+
+                    if (error == QNetworkReply::OperationCanceledError) {
+                        if (!m_userStopped) {
+                        } else {
+                            log_->appendPlainText("Download cancelled by user.");
+                        }
+                    } else if (error != QNetworkReply::NoError) {
+                        QString detail;
+                        if (error == QNetworkReply::ContentNotFoundError)
+                            detail = "Server replied: 404 – dictionary not found. database not changed.";
+                        else if (error == QNetworkReply::HostNotFoundError ||
+                                 error == QNetworkReply::TimeoutError)
+                            detail = "No internet connection.";
+                        else
+                            detail = QString("Network error: %1").arg(errorString);
+                        log_->appendPlainText("Download failed. " + detail);
+                    } else {
+                        QString tempFile = localFile + ".tmp";
+                        QFile file(tempFile);
+                        if (!file.open(QIODevice::WriteOnly)) {
+                            log_->appendPlainText(QString("Error: cannot write temporary file %1").arg(tempFile));
+                        } else {
+                            file.write(data);
+                            file.close();
+
+                            QFile::remove(localFile);
+                            if (QFile::rename(tempFile, localFile)) {
+                                log_->appendPlainText("Success! Dictionary updated.");
+                                log_->appendPlainText("Please restart fcitx5 to use the new dictionary. dictionary can be tested on settings tab without restart this application. ");
+                                if (onDatabaseUpdate_) onDatabaseUpdate_();
+                            } else {
+                                log_->appendPlainText("Error: could not replace the old dictionary file.");
+                            }
+                        }
+                    }
+
+                    downloadBtn_->setEnabled(true);
+                    stopDownloadBtn_->setVisible(false);
+                }, Qt::QueuedConnection);
         });
     }
-
-    QTextEdit *helpContent_;
-    QPushButton *downloadBtn_;
-    QPlainTextEdit *log_;
-    QNetworkAccessManager *netManager_;
 };
 
 
@@ -956,33 +1043,44 @@ public:
         tab->setDocumentMode(true);
         tabBar->setExpanding(true);
 
-        auto *importTab  = new ImportTab;
-        auto *editTab    = new DbEditorTab;
-        auto *testTab = new TestTab;
-        auto *helpTab    = new HelpTab;
+        m_importTab  = new ImportTab;
+        m_editTab    = new DbEditorTab;
+        m_testTab = new TestTab;
+        m_helpTab    = new HelpTab;
 
-        tab->addTab(importTab,  "Learn Words");
-        tab->addTab(editTab,    "Edit Dictionary");
-        tab->addTab(testTab,    "Test");
-        tab->addTab(helpTab,    "Help");
+        tab->addTab(m_importTab,  "Learn Words");
+        tab->addTab(m_editTab,    "Edit Dictionary");
+        tab->addTab(m_testTab,    "Test");
+        tab->addTab(m_helpTab,    "Help");
 
-        connect(tab, &QTabWidget::currentChanged, this, [tab, editTab](int idx) {
-            if (tab->widget(idx) == editTab) editTab->refresh();
+        connect(tab, &QTabWidget::currentChanged, this, [this, tab](int idx) {
+            if (tab->widget(idx) == m_editTab) m_editTab->refresh();
         });
 
         setCentralWidget(tab);
-        auto update_fn = [this]() {
+
+        // Setup callbacks
+        auto update_status_fn = [this]() {
             this->updateStatusBar();
         };
 
-        importTab->setOnDatabaseUpdateCallback(update_fn);
-        editTab->setOnDatabaseUpdateCallback(update_fn);
+        m_importTab->setOnDatabaseUpdateCallback(update_status_fn);
+        m_editTab->setOnDatabaseUpdateCallback(update_status_fn);
+
+        m_helpTab->setOnDatabaseUpdateCallback([this](){
+            m_editTab->refresh();
+            this->updateStatusBar();
+        });
 
         updateStatusBar();
     }
 
 
 private:
+    ImportTab* m_importTab;
+    DbEditorTab* m_editTab;
+    TestTab* m_testTab;
+    HelpTab* m_helpTab;
     QWidget *m_statusWidget{nullptr};
 
     void updateStatusBar() {
