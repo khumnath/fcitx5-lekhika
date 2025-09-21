@@ -57,122 +57,294 @@ along with this program. If not, see <https://www.gnu.org/licenses/>
 #include <fstream>
 #include <functional>
 #include <memory>
-#include <sstream>
+#include <vector>
+#include <string>
+#include <algorithm>
 
 #include <unicode/brkiter.h>
 #include <unicode/uchar.h>
 #include <unicode/unistr.h>
 
+#include <QtConcurrent/QtConcurrent>
+#include <QFuture>
 
 #ifdef HAVE_SQLITE3
+// Use python script(lekhika-trainer.py) to add words in db if simplicity is perfered.
 
+  /* ---------------------------------------------------------- */
+ /* Helper to validate Devanagari grapheme clusters            */
 /* ---------------------------------------------------------- */
-/* Helper to validate Devanagari grapheme clusters           */
-/* -------------------------------------------------------- */
-bool isValidDevanagariWord(const std::string &utf8)
-{
-    icu::UnicodeString u = icu::UnicodeString::fromUTF8(utf8);
+
+inline bool isDependentVowelSign(UChar32 c) { return c >= 0x093E && c <= 0x094C; }
+inline bool isDevanagariDigit(UChar32 c) { return c >= 0x0966 && c <= 0x096F; }
+inline bool isASCII(unsigned char c) { return c < 0x80; }
+bool isValidDevanagariWord(const icu::UnicodeString &u) {
     if (u.isEmpty()) return false;
 
     UErrorCode status = U_ZERO_ERROR;
     std::unique_ptr<icu::BreakIterator> bi(
-        icu::BreakIterator::createCharacterInstance(icu::Locale::getUS(), status));
+        icu::BreakIterator::createCharacterInstance(icu::Locale::getUS(), status)
+        );
     if (U_FAILURE(status)) return false;
 
     bi->setText(u);
-    int32_t start = bi->first();
-    for (int32_t end = bi->next(); end != icu::BreakIterator::DONE; start = end, end = bi->next()) {
+
+    int32_t clusterCount = 0;
+    bool firstClusterChecked = false;
+
+    for (int32_t start = bi->first(), end = bi->next();
+         end != icu::BreakIterator::DONE;
+         start = end, end = bi->next())
+    {
+        clusterCount++;
         icu::UnicodeString cluster = u.tempSubStringBetween(start, end);
-        UChar32 first = cluster.char32At(0);
+        if (cluster.isEmpty()) continue;
+        UChar32 firstCharOfCluster = cluster.char32At(0);
 
-        // Check if the first character is a valid Devanagari vowel or consonant
-        if (!((first >= 0x0904 && first <= 0x0914) || (first >= 0x0915 && first <= 0x0939)))
-            return false;
+        // Reject non-Devanagari, digits, or joiners.
+        if (isDevanagariDigit(firstCharOfCluster) || firstCharOfCluster == 0x200C || firstCharOfCluster == 0x200D) return false;
+        if (firstCharOfCluster < 0x0900 || firstCharOfCluster > 0x097F) return false;
 
-        // A valid grapheme cluster should not end with a Halant (Virama)
-        UChar32 last = cluster.char32At(cluster.length() - 1);
-        if (last == 0x094D) return false;
+        bool isIndependentVowel = (firstCharOfCluster >= 0x0904 && firstCharOfCluster <= 0x0914);
 
-        // Ensure all characters are within the Devanagari block
+        if (!firstClusterChecked) {
+            firstClusterChecked = true;
+            bool isConsonant = (firstCharOfCluster >= 0x0915 && firstCharOfCluster <= 0x0939);
+            // The first character of a word must be a consonant, an independent vowel, or Om.
+            if (!(isIndependentVowel || isConsonant) || isDependentVowelSign(firstCharOfCluster))
+                return false;
+        } else {
+            // Any subsequent cluster cannot start with an independent vowel.
+            if (isIndependentVowel) return false;
+        }
+
+        // Check for orphaned modifiers and invalid sequences within the cluster
+        bool hasBase = false;
+        UChar32 prevChar = 0; // Keep track of the previous character
         for (int32_t i = 0; i < cluster.length(); ++i) {
             UChar32 c = cluster.char32At(i);
-            if (c < 0x0900 || c > 0x097F) return false;
+            bool isCurrentCharIndependentVowel = (c >= 0x0904 && c <= 0x0914);
+
+            // RULE: An independent vowel cannot follow a Halant.
+            if (prevChar == 0x094D && isCurrentCharIndependentVowel) {
+                return false;
+            }
+
+            if ((c >= 0x0904 && c <= 0x0914) || (c >= 0x0915 && c <= 0x0939) || c == 0x0950) {
+                hasBase = true;
+            }
+            // RULE: An orphaned dependent vowel sign (matra) is invalid.
+            if (isDependentVowelSign(c) && !hasBase) return false;
+
+            prevChar = c;
         }
     }
-    return true;
+
+    // A word should not end with a Halant/Virama
+    if (!u.isEmpty() && u.char32At(u.length() - 1) == 0x094D) {
+        return false;
+    }
+
+    return clusterCount > 0;
 }
 
+  /* ---------------------------------------------------------- */
+ /* Multithreaded Processing Functions                         */
 /* ---------------------------------------------------------- */
-/* Worker: learn file and log actions                        */
-/* -------------------------------------------------------- */
+
+std::vector<std::string> validateWordsChunk(const std::vector<icu::UnicodeString> &tokens, std::atomic<bool> *stop)
+{
+    std::vector<std::string> validWords;
+    validWords.reserve(tokens.size());
+    for (const auto &token : tokens) {
+        if (*stop) {
+            break;
+        }
+        if (isValidDevanagariWord(token)) {
+            std::string word;
+            token.toUTF8String(word);
+            validWords.push_back(word);
+        }
+    }
+    return validWords;
+}
+
+  /* ---------------------------------------------------------- */
+ /* Worker: learn file and log actions                         */
+/* ---------------------------------------------------------- */
 static void learnWorker(const QString &filePath,
                         QPlainTextEdit *log,
                         std::atomic<bool> *stop)
 {
     std::ifstream in(filePath.toLocal8Bit().constData(), std::ios::binary);
     if (!in) {
-        QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection,
-                                  Q_ARG(QString, "ERROR: cannot read file"));
+        QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection, Q_ARG(QString, "ERROR: cannot read file"));
         return;
     }
-    std::ostringstream ss;
-    ss << in.rdbuf();
-    const std::string whole = ss.str();
+
+    //  Get file size and calculate total chunks
+    in.seekg(0, std::ios::end);
+    const long long fileSize = in.tellg();
+    in.seekg(0, std::ios::beg);
+
+    const size_t targetChunkSize = 15 * 1024 * 1024; // 15MB
+    // Use the smaller of the file size or the target chunk size, but don't use a zero-size chunk.
+    size_t chunkSize = targetChunkSize;
+    if (fileSize > 0 && static_cast<size_t>(fileSize) < targetChunkSize) {
+        chunkSize = fileSize; // If file is smaller, use its size as the one and only chunk
+    }
+    const int totalChunks = (fileSize > 0 && chunkSize > 0) ? (fileSize + chunkSize - 1) / chunkSize : 0;
+    const int threadCount = QThread::idealThreadCount();
+
+    // Initial log
+    QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection, Q_ARG(QString,
+                                                                                  QString("Starting job...\n"
+                                                                                          "  - File: %1\n"
+                                                                                          "  - Size: %2 MB\n"
+                                                                                          "  - Chunks: %3 (up to %4 MB each)\n"
+                                                                                          "  - CPU Cores: %5")
+                                                                                      .arg(filePath)
+                                                                                      .arg(fileSize / (1024.0 * 1024.0), 0, 'f', 2)
+                                                                                      .arg(totalChunks)
+                                                                                      .arg(chunkSize / (1024.0 * 1024.0), 0, 'f', 2)
+                                                                                      .arg(threadCount)
+                                                                                  ));
+
+    std::vector<char> buffer(chunkSize);
+    std::string leftover;
+    long long totalValidWordsFound = 0;
+    long long totalInvalidWordsFound = 0;
+    int chunkCount = 0;
+    int added = 0, skipped = 0;
+    bool dbError = false;
 
     DictionaryManager dm;
-    std::string cur;
-    int seen = 0, added = 0, skipped = 0;
 
+    while (in.read(buffer.data(), chunkSize) || in.gcount() > 0) {
+        if (*stop || dbError) break;
 
-    auto flush = [&] {
-        if (cur.empty()) return;
-        ++seen;
-        if (isValidDevanagariWord(cur)) {
-            int freq = dm.getWordFrequency(cur);
-            dm.addWord(cur);
-            if (freq > 0) {
-                ++skipped;
-                QString line = QString("  -> %1 (skipped, freq++)").arg(QString::fromStdString(cur));
-                QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection,
-                                          Q_ARG(QString, line));
-            } else {
-                ++added;
-                QString line = QString("  + %1").arg(QString::fromStdString(cur));
-                QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection,
-                                          Q_ARG(QString, line));
+        chunkCount++;
+        size_t bytesRead = in.gcount();
+        QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection, Q_ARG(QString,
+                                                                                      QString("Processing chunk %1 of %2...").arg(chunkCount).arg(totalChunks)));
+
+        std::string currentChunk(buffer.data(), bytesRead);
+        currentChunk.insert(0, leftover);
+        leftover.clear();
+
+        if (!in.eof()) {
+            size_t splitPoint = currentChunk.find_last_of(" \t\n\r");
+            if (splitPoint != std::string::npos) {
+                leftover = currentChunk.substr(splitPoint + 1);
+                currentChunk.resize(splitPoint);
             }
-            QThread::msleep(2);
         }
-        cur.clear();
-    };
 
-    for (unsigned char c : whole) {
+        icu::UnicodeString u_chunk = icu::UnicodeString::fromUTF8(currentChunk);
+        UErrorCode status = U_ZERO_ERROR;
+        std::unique_ptr<icu::BreakIterator> wi(icu::BreakIterator::createWordInstance(icu::Locale::getUS(), status));
+        if (U_FAILURE(status)) continue;
+        wi->setText(u_chunk);
+
+        std::vector<icu::UnicodeString> chunkTokens;
+        for (int32_t start = wi->first(), end = wi->next(); end != icu::BreakIterator::DONE; start = end, end = wi->next()) {
+            icu::UnicodeString token = u_chunk.tempSubStringBetween(start, end);
+            std::string utf8First;
+            token.tempSubStringBetween(0, 1).toUTF8String(utf8First);
+            if (!token.isEmpty() && (utf8First.empty() || !isASCII(utf8First[0]))) {
+                chunkTokens.push_back(token);
+            }
+        }
+        u_chunk.remove();
+
+        std::vector<std::vector<icu::UnicodeString>> chunksForThreads(threadCount);
+        for (size_t i = 0; i < chunkTokens.size(); ++i) {
+            chunksForThreads[i % threadCount].push_back(chunkTokens[i]);
+        }
+
+        QList<QFuture<std::vector<std::string>>> futures;
+        for (const auto& chunk : chunksForThreads) {
+            if (!chunk.empty()) {
+                futures.append(QtConcurrent::run(validateWordsChunk, chunk, stop));
+            }
+        }
+
+        std::vector<std::string> chunkValidWords;
+        for (auto& future : futures) {
+            future.waitForFinished();
+            if (*stop) break;
+            auto result = future.result();
+            chunkValidWords.insert(chunkValidWords.end(), result.begin(), result.end());
+        }
         if (*stop) break;
-        if (std::isalnum(c) || (c & 0x80))
-            cur += c;
-        else
-            flush();
-    }
-    flush();
 
-    QString summary = QString("Finished: %1 tokens, %2 added, %3 skipped/existing.")
-                          .arg(seen).arg(added).arg(skipped);
-    QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection,
-                              Q_ARG(QString, summary));
+        long long invalidInChunk = chunkTokens.size() - chunkValidWords.size();
+        totalInvalidWordsFound += invalidInChunk;
+        totalValidWordsFound += chunkValidWords.size();
+
+        if (!chunkValidWords.empty()) {
+            QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection, Q_ARG(QString,
+                                                                                          QString("  -> Found %1 valid words (%2 invalid) in chunk %3. Committing to database...").arg(chunkValidWords.size()).arg(invalidInChunk).arg(chunkCount)));
+
+            try {
+                dm.beginTransaction();
+                // Write this chunk's words to the DB transaction
+                for (const auto& word : chunkValidWords) {
+                    int freq = dm.getWordFrequency(word);
+                    dm.addWord(word);
+                    if (freq > 0) skipped++;
+                    else added++;
+                }
+                dm.commitTransaction();
+                QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection, Q_ARG(QString,
+                                                                                              QString("  -> Commit successful. Total valid words processed so far: %1.").arg(totalValidWordsFound)));
+            } catch (const std::exception& e) {
+                dm.rollbackTransaction();
+                dbError = true;
+                QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection, Q_ARG(QString,
+                                                                                              QString("  -> DATABASE ERROR on chunk %1: %2. Aborting.").arg(chunkCount).arg(e.what())));
+            }
+        } else {
+            QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection, Q_ARG(QString,
+                                                                                          QString("  -> No new valid words found in chunk %1.").arg(chunkCount)));
+        }
+    }
+
+    if (*stop) {
+        QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection, Q_ARG(QString, "\nOperation cancelled by user."));
+        return;
+    }
+
+    if (dbError) {
+        QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection, Q_ARG(QString, "\nOperation failed due to a database error."));
+        return;
+    }
+
+    QString summary = QString("\nFinished:\n"
+                              "  - Valid words found: %1\n"
+                              "  - Invalid/Skipped tokens: %2\n"
+                              "  - Added to DB: %3\n"
+                              "  - Existing in DB (frequency updated): %4")
+                          .arg(totalValidWordsFound)
+                          .arg(totalInvalidWordsFound)
+                          .arg(added)
+                          .arg(skipped);
+    QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection, Q_ARG(QString, summary));
 }
 
+
+  /* ---------------------------------------------------------- */
+ /* Import Tab                                                 */
 /* ---------------------------------------------------------- */
-/* Import Tab                                                */
-/* -------------------------------------------------------- */
 class ImportTab : public QWidget
 {
 public:
     explicit ImportTab(QWidget *parent = nullptr) : QWidget(parent)
     {
-        auto *lay      = new QVBoxLayout(this);
-        auto *top      = new QHBoxLayout;
-        openBtn        = new QPushButton("Open text file …");
-        learnBtn       = new QPushButton("Learn words");
+        auto *lay     = new QVBoxLayout(this);
+        auto *top     = new QHBoxLayout;
+        openBtn       = new QPushButton("Open text file …");
+        learnBtn      = new QPushButton("Learn words");
         learnBtn->setEnabled(false);
         top->addWidget(openBtn);
         top->addWidget(learnBtn);
@@ -228,6 +400,7 @@ private:
     void startLearn()
     {
         if (currentFile.isEmpty()) return;
+        log->clear(); // Clear log for new job
         log->appendPlainText("Learning …");
         learnBtn->setEnabled(false);
         stopFlag = false;
@@ -252,9 +425,9 @@ private:
     std::function<void()> onDatabaseUpdate_;
 };
 
+  /* ----------------------------------------------------------- */
+ /* DB Editor Tab                                               */
 /* ----------------------------------------------------------- */
-/* DB Editor Tab                                              */
-/* --------------------------------------------------------- */
 class DbEditorTab : public QWidget
 {
 public:
@@ -284,6 +457,9 @@ public:
         table->setHorizontalHeaderLabels({"Word", "Frequency"});
         table->horizontalHeader()->setStretchLastSection(true);
         table->setSelectionMode(QAbstractItemView::ExtendedSelection);
+        table->setSortingEnabled(true);
+
+        connect(table->horizontalHeader(), &QHeaderView::sectionClicked, this, &DbEditorTab::onSortColumnChanged);
 
         auto *logFrame = new QWidget;
         auto *logLayout = new QVBoxLayout(logFrame);
@@ -317,6 +493,12 @@ public:
     }
 
 private:
+    void onSortColumnChanged(int logicalIndex) {
+        m_currentSortColumn = logicalIndex;
+        m_currentSortOrder = table->horizontalHeader()->sortIndicatorOrder();
+        reload();
+    }
+
     void onSelectionChanged() {
         int n = table->selectionModel()->selectedRows().count();
         editBtn->setEnabled(n == 1);
@@ -326,6 +508,7 @@ private:
         log->clear();
         currentPage_ = 0;
         table->setRowCount(0);
+        table->horizontalHeader()->setSortIndicator(m_currentSortColumn, m_currentSortOrder);
         log->appendPlainText("Reloading dictionary...");
         loadMore();
     }
@@ -341,7 +524,9 @@ private:
         }
 
         DictionaryManager dm;
-        auto words = dm.getAllWords(pageSize_, currentPage_ * pageSize_);
+        auto sortBy = (m_currentSortColumn == 0) ? DictionaryManager::ByWord : DictionaryManager::ByFrequency;
+        bool ascending = (m_currentSortOrder == Qt::AscendingOrder);
+        auto words = dm.getAllWords(pageSize_, currentPage_ * pageSize_, sortBy, ascending);
 
         if (words.empty()) {
             if (currentPage_ > 0) {
@@ -365,15 +550,13 @@ private:
             table->setItem(startRow + i, 0, wItem);
             table->setItem(startRow + i, 1, fItem);
         }
-        table->setSortingEnabled(true);
 
         currentPage_++;
         isLoading_ = false;
     }
 
     void onScroll(int value) {
-        if (isLoading_) return;
-        if (value == table->verticalScrollBar()->maximum()) {
+        if (!isLoading_ && value == table->verticalScrollBar()->maximum()) {
             loadMore();
         }
     }
@@ -394,13 +577,20 @@ private:
     void delRows() {
         auto sel = table->selectionModel()->selectedRows();
         if (sel.empty()) { log->appendPlainText("Nothing selected."); return; }
+
+        // Sort indexes in descending order to safely remove rows from bottom to top
+        std::sort(sel.begin(), sel.end(), [](const QModelIndex &a, const QModelIndex &b) {
+            return a.row() > b.row();
+        });
+
         DictionaryManager dm;
         for (const auto &idx : sel) {
             QString w = table->item(idx.row(), 0)->text();
             dm.removeWord(w.toStdString());
             log->appendPlainText(QString("- %1 deleted").arg(w));
+            table->removeRow(idx.row());
         }
-        reload();
+
         if(onDatabaseUpdate_) onDatabaseUpdate_();
     }
 
@@ -465,11 +655,13 @@ private:
     int currentPage_ = 0;
     const int pageSize_ = 50;
     bool isLoading_ = false;
+    int m_currentSortColumn = 0;
+    Qt::SortOrder m_currentSortOrder = Qt::AscendingOrder;
 };
 
+  /* ---------------------------------------------------------- */
+ /* Test Tab                                                   */
 /* ---------------------------------------------------------- */
-/*    Test Tab                                               */
-/* -------------------------------------------------------- */
 class TestTab : public QWidget
 {
 public:
@@ -587,9 +779,9 @@ private:
     QPlainTextEdit *outputText_;
 };
 
+  /* ---------------------------------------------------------- */
+ /* Help Tab                                                   */
 /* ---------------------------------------------------------- */
-/* Help Tab                                                  */
-/* -------------------------------------------------------- */
 class HelpTab : public QWidget
 {
 public:
@@ -637,7 +829,7 @@ public:
          )");
         helpContent_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
         mainLay->addWidget(helpContent_, 1);
-        dwninfo = new QLabel("If you want a head start, you can download a dictionary with pre trained common words. (not available yet)");
+        dwninfo = new QLabel("If you want a head start, you can download a dictionary with pre trained common words.");
         dwninfo->setWordWrap(true);
         auto *group = new QGroupBox("");
         auto *groupLay = new QVBoxLayout(group);
@@ -697,7 +889,7 @@ private:
         }
 
         const QString localFile = dirPath + QLatin1String("/lekhikadict.akshardb");
-        const QUrl url("https://raw.githubusercontent.com/khumnath/lekhika-devanagari-db/main/lekhikadict.akshardb");
+        const QUrl url("https://github.com/khumnath/fcitx5-lekhika/releases/download/dictionary/lekhikadict.akshardb");
         QNetworkRequest req(url);
         QNetworkReply *netReply = netManager_->get(req);
 
@@ -744,9 +936,9 @@ private:
 };
 
 
+  /* ---------------------------------------------------------- */
+ /* Main Window                                                */
 /* ---------------------------------------------------------- */
-/* Main Window                                               */
-/* -------------------------------------------------------- */
 class MainWin : public QMainWindow
 {
 public:
@@ -764,15 +956,15 @@ public:
         tab->setDocumentMode(true);
         tabBar->setExpanding(true);
 
-        auto *importTab   = new ImportTab;
-        auto *editTab     = new DbEditorTab;
+        auto *importTab  = new ImportTab;
+        auto *editTab    = new DbEditorTab;
         auto *testTab = new TestTab;
-        auto *helpTab     = new HelpTab;
+        auto *helpTab    = new HelpTab;
 
-        tab->addTab(importTab,   "Learn Words");
-        tab->addTab(editTab,     "Edit Dictionary");
-        tab->addTab(testTab,     "Test");
-        tab->addTab(helpTab,     "Help");
+        tab->addTab(importTab,  "Learn Words");
+        tab->addTab(editTab,    "Edit Dictionary");
+        tab->addTab(testTab,    "Test");
+        tab->addTab(helpTab,    "Help");
 
         connect(tab, &QTabWidget::currentChanged, this, [tab, editTab](int idx) {
             if (tab->widget(idx) == editTab) editTab->refresh();
@@ -809,7 +1001,7 @@ private:
         if (info.count("db_path"))          path      = QDir::toNativeSeparators(QString::fromStdString(info["db_path"]));
         if (info.count("engine"))           engine    = QString::fromStdString(info["engine"]);
         if (info.count("format_version"))   version   = QString::fromStdString(info["format_version"]);
-        if (info.count("created_at"))             date      = QString::fromStdString(info["created_at"]);
+        if (info.count("created_at"))           date      = QString::fromStdString(info["created_at"]);
 
         QString infoText = QString(
                                "<style>"
@@ -854,7 +1046,7 @@ private:
         layout->setSpacing(0);
         layout->addWidget(infoLbl);
         layout->addWidget(pathLineWidget);
-        
+
         if (m_statusWidget) {
             statusBar()->removeWidget(m_statusWidget);
             m_statusWidget->deleteLater();
