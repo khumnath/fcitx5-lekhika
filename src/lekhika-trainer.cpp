@@ -435,7 +435,7 @@ public:
     explicit DbEditorTab(QWidget *parent = nullptr) : QWidget(parent)
     {
         auto *v = new QVBoxLayout(this);
-        auto *h = new QHBoxLayout;
+        auto *topControls = new QHBoxLayout;
 
         reloadBtn = new QPushButton("Reload");
         newBtn    = new QPushButton("New word");
@@ -444,12 +444,20 @@ public:
         editBtn   = new QPushButton("Edit word");
         editBtn->setEnabled(false);
 
-        h->addWidget(reloadBtn);
-        h->addWidget(newBtn);
-        h->addWidget(delBtn);
-        h->addWidget(editBtn);
-        h->addWidget(resetBtn);
-        h->addStretch();
+        topControls->addWidget(reloadBtn);
+        topControls->addWidget(newBtn);
+        topControls->addWidget(delBtn);
+        topControls->addWidget(editBtn);
+        topControls->addWidget(resetBtn);
+        topControls->addStretch();
+
+        auto *searchLay = new QHBoxLayout;
+        searchEdit_ = new QLineEdit;
+        searchEdit_->setPlaceholderText("Search for a word (Latin or Devanagari)...");
+        clearSearchBtn_ = new QPushButton("Clear");
+        searchLay->addWidget(new QLabel("Search:"));
+        searchLay->addWidget(searchEdit_);
+        searchLay->addWidget(clearSearchBtn_);
 
         table = new QTableWidget(0, 2);
         table->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -473,7 +481,8 @@ public:
         log->setMaximumHeight(120);
         logLayout->addWidget(log);
 
-        v->addLayout(h);
+        v->addLayout(topControls);
+        v->addLayout(searchLay);
         v->addWidget(table, 1);
         v->addWidget(logFrame, 0);
 
@@ -486,6 +495,8 @@ public:
         connect(table->selectionModel(), &QItemSelectionModel::selectionChanged,
                 this, &DbEditorTab::onSelectionChanged);
         connect(table->verticalScrollBar(), &QScrollBar::valueChanged, this, &DbEditorTab::onScroll);
+        connect(searchEdit_, &QLineEdit::textChanged, this, &DbEditorTab::onSearchTextChanged);
+        connect(clearSearchBtn_, &QPushButton::clicked, this, [this](){ searchEdit_->clear(); });
     }
 
     void setOnDatabaseUpdateCallback(std::function<void()> callback) {
@@ -493,6 +504,39 @@ public:
     }
 
 private:
+    void onSearchTextChanged(const QString &text) {
+        if (text.isEmpty()) {
+            m_isSearchActive = false;
+            reload();
+            return;
+        }
+
+        m_isSearchActive = true;
+
+        Transliteration transliterator;
+        std::string devanagari_search_term = transliterator.transliterate(text.toStdString());
+
+        log->appendPlainText(QString("Searching for '%1' (%2)...").arg(text, QString::fromStdString(devanagari_search_term)));
+
+        DictionaryManager dm;
+        auto words = dm.searchWords(devanagari_search_term);
+
+        table->setSortingEnabled(false);
+        table->setRowCount(0); // Clear table before populating search results
+        table->setRowCount(words.size());
+
+        for(size_t i = 0; i < words.size(); ++i) {
+            auto *wItem = new QTableWidgetItem(QString::fromStdString(words[i].first));
+            auto *fItem = new QTableWidgetItem(QString::number(words[i].second));
+            wItem->setFlags(wItem->flags() & ~Qt::ItemIsEditable);
+            fItem->setFlags(fItem->flags() & ~Qt::ItemIsEditable);
+            table->setItem(i, 0, wItem);
+            table->setItem(i, 1, fItem);
+        }
+        table->setSortingEnabled(true);
+        log->appendPlainText(QString("Found %1 match(es).").arg(words.size()));
+    }
+
     void onSortColumnChanged(int logicalIndex) {
         m_currentSortColumn = logicalIndex;
         m_currentSortOrder = table->horizontalHeader()->sortIndicatorOrder();
@@ -505,6 +549,10 @@ private:
     }
 
     void reload() {
+        if (m_isSearchActive) {
+            onSearchTextChanged(searchEdit_->text());
+            return;
+        }
         log->clear();
         currentPage_ = 0;
         table->setRowCount(0);
@@ -514,7 +562,7 @@ private:
     }
 
     void loadMore() {
-        if (isLoading_) return;
+        if (isLoading_ || m_isSearchActive) return;
         isLoading_ = true;
 
         if (currentPage_ == 0) {
@@ -556,7 +604,7 @@ private:
     }
 
     void onScroll(int value) {
-        if (!isLoading_ && value == table->verticalScrollBar()->maximum()) {
+        if (!isLoading_ && !m_isSearchActive && value == table->verticalScrollBar()->maximum()) {
             loadMore();
         }
     }
@@ -578,7 +626,6 @@ private:
         auto sel = table->selectionModel()->selectedRows();
         if (sel.empty()) { log->appendPlainText("Nothing selected."); return; }
 
-        // Sort indexes in descending order to safely remove rows from bottom to top
         std::sort(sel.begin(), sel.end(), [](const QModelIndex &a, const QModelIndex &b) {
             return a.row() > b.row();
         });
@@ -649,12 +696,14 @@ private:
 
 private:
     QTableWidget *table;
-    QPushButton *reloadBtn, *newBtn, *delBtn, *resetBtn, *editBtn;
+    QPushButton *reloadBtn, *newBtn, *delBtn, *resetBtn, *editBtn, *clearSearchBtn_;
+    QLineEdit *searchEdit_;
     QPlainTextEdit *log;
-    std::function<void()> onDatabaseUpdate_;
+    std::function<void()> onDatabaseUpdate_ = nullptr;
     int currentPage_ = 0;
     const int pageSize_ = 50;
     bool isLoading_ = false;
+    bool m_isSearchActive = false;
     int m_currentSortColumn = 0;
     Qt::SortOrder m_currentSortOrder = Qt::AscendingOrder;
 };

@@ -298,6 +298,31 @@ void DictionaryManager::removeWord(const std::string &word) {
     sqlite3_finalize(stmt);
 }
 
+std::vector<std::pair<std::string, int>>
+DictionaryManager::searchWords(const std::string& searchTerm) {
+    std::vector<std::pair<std::string, int>> results;
+    if (!db_ || searchTerm.empty()) return results;
+    sqlite3_stmt *stmt;
+
+    // Use LIKE with wildcards to search for the term anywhere in the word
+    std::string sql_str = "SELECT word, frequency FROM words WHERE word LIKE ? ORDER BY frequency DESC;";
+
+    if (sqlite3_prepare_v2(db_, sql_str.c_str(), -1, &stmt, NULL) != SQLITE_OK) {
+        return results;
+    }
+
+    std::string pattern = "%" + searchTerm + "%";
+    sqlite3_bind_text(stmt, 1, pattern.c_str(), -1, SQLITE_TRANSIENT);
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        results.emplace_back((const char *)sqlite3_column_text(stmt, 0),
+                             sqlite3_column_int(stmt, 1));
+    }
+
+    sqlite3_finalize(stmt);
+    return results;
+}
+
 bool DictionaryManager::updateWordFrequency(const std::string &word,
                                             int frequency) {
     if (!db_) return false;

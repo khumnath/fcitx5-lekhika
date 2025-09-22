@@ -39,6 +39,7 @@ public:
 
     enum SortColumn { ByWord = 0, ByFrequency = 1 };
     std::vector<std::pair<std::string, int>> getAllWords(int limit = -1, int offset = 0, SortColumn sortBy = ByWord, bool ascending = true);
+    std::vector<std::pair<std::string, int>> searchWords(const std::string& searchTerm);
 
     // Transaction management
     void beginTransaction();
