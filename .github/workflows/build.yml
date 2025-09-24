@@ -11,7 +11,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Only build with gcc, but create both Debug and Release versions
         cc: [gcc]
         build_type: [Debug, Release]
     runs-on: ubuntu-latest
@@ -47,14 +46,12 @@ jobs:
         run: DESTDIR=dist cmake --install build
 
       - name: Upload Release build artefacts
-        # Only upload the artifact for the Release build
         if: matrix.build_type == 'Release'
         uses: actions/upload-artifact@v4
         with:
           name: linux-all
           path: dist/
 
-  # This job creates the source tarball needed for the release workflow
   source-archive:
     runs-on: ubuntu-latest
     steps:
@@ -63,15 +60,20 @@ jobs:
         with:
           fetch-depth: 0
           submodules: 'recursive'
+
       - name: Create source tarball
         run: |
           VER=$(cat version.txt)
-          TAR="fcitx5-lekhika-${VER}.tar.gz"
-          # Create a source tarball that includes the submodule content
-          git archive --format=tar --prefix="fcitx5-lekhika-${VER}/" HEAD | (cd liblekhika && git archive --format=tar --prefix="fcitx5-lekhika-${VER}/liblekhika/" HEAD) | gzip > "$TAR"
+          DIR="fcitx5-lekhika-${VER}"
+          TAR="${DIR}.tar.gz"
+
+          # Make a copy of repo including submodules
+          mkdir "$DIR"
+          rsync -a --exclude='.git' ./ "$DIR"/
+          tar -czf "$TAR" "$DIR"
+
       - name: Upload source tarball
         uses: actions/upload-artifact@v4
         with:
           name: source-tarball
           path: '*.tar.gz'
-
