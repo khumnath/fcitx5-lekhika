@@ -28,7 +28,8 @@ jobs:
             build-essential dpkg-dev debhelper devscripts \
             cmake ninja-build extra-cmake-modules \
             libfcitx5core-dev libfcitx5utils-dev libfcitx5config-dev \
-            libsqlite3-dev qt6-base-dev libicu-dev qt6-base-dev-tools
+            libsqlite3-dev qt6-base-dev libicu-dev qt6-base-dev-tools \
+            libgl1-mesa-dev
       - name: Build Debian package
         run: |
           # Use debian packaging tools to build from the checked-out source
@@ -39,7 +40,7 @@ jobs:
             echo 'Section: utils'
             echo 'Priority: optional'
             echo 'Maintainer: KHUMNATH CG<nath.khum@gmail.com>'
-            echo 'Build-Depends: debhelper-compat (= 13), cmake, ninja-build, extra-cmake-modules, libfcitx5core-dev, libfcitx5utils-dev, libfcitx5config-dev, libsqlite3-dev, qt6-base-dev, libicu-dev'
+            echo 'Build-Depends: debhelper-compat (= 13), cmake, ninja-build, extra-cmake-modules, libfcitx5core-dev, libfcitx5utils-dev, libfcitx5config-dev, libsqlite3-dev, qt6-base-dev, libicu-dev, libgl1-mesa-dev'
             echo 'Standards-Version: 4.6.0'
             echo ''
             echo 'Package: fcitx5-lekhika'
@@ -83,14 +84,15 @@ jobs:
     runs-on: ubuntu-latest
     container: fedora:39
     steps:
+      - name: Install build dependencies
+        run: |
+          dnf clean all
+          dnf install -y git-core rpm-build cmake ninja-build gcc-c++ \
+            fcitx5-devel qt6-qtbase-devel sqlite-devel libicu-devel qt6-qtwidgets-devel
       - name: Checkout repository and submodules
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
-      - run: |
-          dnf clean all
-          dnf install -y rpm-build cmake ninja-build gcc-c++ \
-            fcitx5-devel qt6-qtbase-devel sqlite-devel libicu-devel qt6-qtwidgets-devel
       - name: Build RPM package
         run: |
           VER=${GITHUB_REF_NAME#v}
@@ -139,11 +141,12 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
+      - name: Install build dependencies
+        run: pacman -Syu --noconfirm git base-devel cmake ninja fcitx5-qt sqlite qt6-base icu qt6-widgets
       - name: Checkout repository and submodules
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
-      - run: pacman -Syu --noconfirm base-devel cmake ninja fcitx5-qt sqlite qt6-base icu qt6-widgets
       - name: Build Arch package
         run: |
           VER=${GITHUB_REF_NAME#v}
@@ -195,7 +198,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake ninja-build extra-cmake-modules \
             libfcitx5core-dev libfcitx5utils-dev libfcitx5config-dev \
-            libsqlite3-dev qt6-base-dev libicu-dev qt6-base-dev-tools
+            libsqlite3-dev qt6-base-dev libicu-dev qt6-base-dev-tools \
+            libgl1-mesa-dev
       - name: Build from source
         run: |
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
@@ -223,7 +227,6 @@ jobs:
         run: |
           mkdir organized-release
           # Create the source tarball again for inclusion in the release
-          # Note: This is a slight duplication but ensures the source is present
           git clone https://github.com/${{ github.repository }}.git --recurse-submodules temp-repo
           cd temp-repo
           VER=${GITHUB_REF_NAME#v}
