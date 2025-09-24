@@ -46,6 +46,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
+            unzip \
             build-essential dpkg-dev debhelper devscripts \
             cmake ninja-build extra-cmake-modules \
             libfcitx5core-dev libfcitx5utils-dev libfcitx5config-dev \
@@ -55,6 +56,7 @@ jobs:
           name: source-tarball
       - name: Build debian package
         run: |
+          unzip source-tarball.zip
           mkdir pkg-src && tar -xf *.tar.gz -C pkg-src --strip-components=1
           cd pkg-src
           
@@ -95,13 +97,14 @@ jobs:
     steps:
       - run: |
           dnf clean all
-          dnf install -y rpm-build cmake ninja-build gcc-c++ \
+          dnf install -y unzip rpm-build cmake ninja-build gcc-c++ \
             fcitx5-devel qt6-qtbase-devel sqlite-devel libicu-devel
       - uses: actions/download-artifact@v4
         with:
           name: source-tarball
       - name: Build RPM package
         run: |
+          unzip source-tarball.zip
           VER=${{ needs.source.outputs.version }}
           mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
           cp *.tar.gz ~/rpmbuild/SOURCES/
@@ -144,12 +147,13 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
-      - run: pacman -Syu --noconfirm base-devel cmake ninja fcitx5-qt sqlite qt6-base icu
+      - run: pacman -Syu --noconfirm unzip base-devel cmake ninja fcitx5-qt sqlite qt6-base icu
       - uses: actions/download-artifact@v4
         with:
           name: source-tarball
       - name: Build Arch package
         run: |
+          unzip source-tarball.zip
           useradd -m builder && mkdir arch_build && mv *.tar.gz arch_build/ && chown -R builder:builder arch_build
           sudo -u builder GITHUB_REPOSITORY=${{ github.repository }} PKGVER=${{ needs.source.outputs.version }} \
           bash -c 'cd arch_build && {
@@ -189,6 +193,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
+            unzip \
             build-essential cmake ninja-build extra-cmake-modules \
             libfcitx5core-dev libfcitx5utils-dev libfcitx5config-dev \
             libsqlite3-dev qt6-base-dev libicu-dev qt6-base-dev-tools
@@ -197,6 +202,7 @@ jobs:
           name: source-tarball
       - name: Build from source
         run: |
+          unzip source-tarball.zip
           mkdir pkg && tar -xf *.tar.gz -C pkg --strip-components=1
           cd pkg
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
