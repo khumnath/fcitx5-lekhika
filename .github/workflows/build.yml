@@ -28,10 +28,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
-            cmake ninja-build extra-cmake-modules \
+            ninja-build extra-cmake-modules \
             libfcitx5core-dev libfcitx5utils-dev libfcitx5config-dev \
             libsqlite3-dev qt6-base-dev qt6-base-dev-tools libicu-dev \
             gettext appstream
+
+      - name: Install recent CMake
+        uses: kitware/cmake-action@v2
+        with:
+          version: ">=3.14"
 
       - name: Configure
         run: |
