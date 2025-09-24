@@ -54,6 +54,8 @@ jobs:
         with:
           name: source-tarball
       - name: Build debian package
+        env:
+          VER: ${{ needs.source.outputs.version }}
         run: |
           mkdir pkg && tar -xf *.tar.gz -C pkg --strip-components=1
           cd pkg
@@ -102,7 +104,6 @@ jobs:
           chmod +x debian/rules
           
           export DEBEMAIL=nath.khum@gmail.com DEBFULLNAME="KHUMNATH CG"
-          VER=${{ needs.source.outputs.version }}
           dch --create -v "${VER}-1" --package fcitx5-lekhika "CI build"
           dpkg-buildpackage -b -uc -us
       - name: Remove debug packages
@@ -125,6 +126,7 @@ jobs:
     container: fedora:39
     steps:
       - run: |
+          dnf clean all
           dnf install -y rpm-build cmake ninja-build gcc-c++ \
             fcitx5-devel qt6-qtbase-devel sqlite-devel libicu-devel qt6-qtwidgets-devel
       - uses: actions/download-artifact@v4
@@ -188,7 +190,7 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
-      - run: pacman -Sy --noconfirm base-devel cmake ninja fcitx5-qt sqlite qt6-base icu qt6-widgets
+      - run: pacman -Syu --noconfirm base-devel cmake ninja fcitx5-qt sqlite qt6-base icu qt6-widgets
       - uses: actions/download-artifact@v4
         with:
           name: source-tarball
