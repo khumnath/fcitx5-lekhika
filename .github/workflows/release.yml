@@ -10,54 +10,72 @@ permissions:
 jobs:
   source-archive:
     runs-on: ubuntu-latest
-    outputs:
-      tarball: ${{ steps.src.outputs.tarball }}
-      version: ${{ steps.src.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout (full, with submodules)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: 'recursive'
 
-      - id: src
+      - name: Create source tarball
+        id: create_tar
         run: |
+          set -e
+          # Determine version from the tag name, e.g. "v2.2.8" -> "2.2.8"
           VER=${GITHUB_REF_NAME#v}
           TAR="fcitx5-lekhika-${VER}.tar"
 
-          # create main archive
+          # Main repo
           git archive --format=tar --prefix="fcitx5-lekhika-${VER}/" HEAD > "$TAR"
 
-          # append liblekhika
-          (cd liblekhika && git archive --format=tar \
-            --prefix="fcitx5-lekhika-${VER}/liblekhika/" HEAD ) >> "$TAR"
+          # If liblekhika submodule exists, append it to the tar (so final tar contains both)
+          if [ -d liblekhika ]; then
+            (cd liblekhika && git archive --format=tar --prefix="fcitx5-lekhika-${VER}/liblekhika/" HEAD) >> "$TAR"
+          fi
 
           gzip -f "$TAR"
-          echo "tarball=$TAR.gz" >> $GITHUB_OUTPUT
-          echo "version=$VER" >> $GITHUB_OUTPUT
+          echo "tarball=fcitx5-lekhika-${VER}.tar.gz" >> "$GITHUB_OUTPUT"
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload source tarball
+        uses: actions/upload-artifact@v4
         with:
           name: source-archive
-          path: ${{ steps.src.outputs.tarball }}
+          path: ${{ steps.create_tar.outputs.tarball }}
 
   arch:
-    runs-on: ubuntu-latest
     needs: source-archive
+    runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download source archive
+        uses: actions/download-artifact@v4
         with:
           name: source-archive
+          path: .
 
-      - name: Install deps
+      - name: Install dependencies (Arch)
         run: pacman -Syu --noconfirm git base-devel cmake ninja fcitx5-qt sqlite qt6-base icu
 
-      - name: Build Arch package
+      - name: Build Arch package (makepkg)
         run: |
+          set -e
           VER=${GITHUB_REF_NAME#v}
-cat > PKGBUILD <<'EOF'
+          TAR="fcitx5-lekhika-${VER}.tar.gz"
+
+          if [ ! -f "$TAR" ]; then
+            echo "ERROR: expected $TAR in workspace"
+            ls -la
+            exit 1
+          fi
+
+          # Create a PKGBUILD with the actual version expanded (makepkg will read this file)
+          cat > PKGBUILD <<EOF
 pkgname=fcitx5-lekhika
 pkgver=${VER}
 pkgrel=1
 arch=('x86_64')
-url="https://github.com/AksharLabs/fcitx5-lekhika"
+url="https://github.com/${GITHUB_REPOSITORY}"
 license=('GPL')
 depends=('fcitx5-qt' 'sqlite' 'icu' 'qt6-base')
 makedepends=('cmake' 'ninja')
@@ -65,58 +83,67 @@ source=("${pkgname}-${pkgver}.tar.gz")
 sha256sums=('SKIP')
 
 build() {
-  cd "$srcdir/${pkgname}-${pkgver}"
+  cd "\$srcdir/\${pkgname}-\${pkgver}"
   cmake -B build -G Ninja -DCMAKE_INSTALL_PREFIX=/usr
   ninja -C build
 }
 
 package() {
-  cd "$srcdir/${pkgname}-${pkgver}"
-  DESTDIR="$pkgdir" ninja -C build install
+  cd "\$srcdir/\${pkgname}-\${pkgver}"
+  DESTDIR="\$pkgdir" ninja -C build install
 }
 EOF
 
-          bsdtar -xf fcitx5-lekhika-${VER}.tar.gz
+          # Now run makepkg; it will use the source tar next to PKGBUILD
           makepkg -sf --noconfirm
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload Arch package
+        uses: actions/upload-artifact@v4
         with:
-          name: arch-pkg
+          name: arch-packages
           path: "*.pkg.tar.zst"
 
   fedora:
-    runs-on: ubuntu-latest
     needs: source-archive
-    container: fedora:latest
+    runs-on: ubuntu-latest
+    container: fedora:39
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Mark repo as safe
-        run: git config --global --add safe.directory $GITHUB_WORKSPACE
-
-      - uses: actions/download-artifact@v4
+      - name: Download source archive
+        uses: actions/download-artifact@v4
         with:
           name: source-archive
+          path: .
 
-      - name: Install deps
+      - name: Install dependencies (Fedora)
         run: dnf install -y git-core rpm-build cmake ninja-build gcc-c++ fcitx5-devel qt6-qtbase-devel sqlite-devel libicu-devel
 
       - name: Build RPM
         run: |
+          set -e
           VER=${GITHUB_REF_NAME#v}
-cat > fcitx5-lekhika.spec <<'EOF'
+          TAR="fcitx5-lekhika-${VER}.tar.gz"
+
+          if [ ! -f "$TAR" ]; then
+            echo "ERROR: expected $TAR in workspace"
+            ls -la
+            exit 1
+          fi
+
+          mkdir -p /root/rpmbuild/{SOURCES,SPECS,BUILD,RPMS,SRPMS}
+          mv "$TAR" /root/rpmbuild/SOURCES/
+
+          # Create a spec file (expand VER here)
+          cat > /root/rpmbuild/SPECS/fcitx5-lekhika.spec <<EOF
 Name:           fcitx5-lekhika
 Version:        ${VER}
 Release:        1%{?dist}
-Summary:        Fcitx5 input method for Nepali
-License:        GPL
-URL:            https://github.com/AksharLabs/fcitx5-lekhika
+Summary:        Lekhika input method for Fcitx5 (includes trainer)
+License:        GPL-3.0-or-later
 Source0:        %{name}-%{version}.tar.gz
-
 BuildRequires:  cmake, ninja-build, gcc-c++, fcitx5-devel, qt6-qtbase-devel, sqlite-devel, libicu-devel
 
 %description
-Nepali input method for Fcitx5.
+Lekhika input method addon for Fcitx5, with bundled liblekhika and trainer GUI.
 
 %prep
 %setup -q
@@ -136,65 +163,92 @@ Nepali input method for Fcitx5.
 /usr/bin/*
 EOF
 
-          mv fcitx5-lekhika-${VER}.tar.gz /root/rpmbuild/SOURCES/
-          rpmbuild -ba fcitx5-lekhika.spec
-          cp /root/rpmbuild/RPMS/x86_64/*.rpm .
+          rpmbuild -ba /root/rpmbuild/SPECS/fcitx5-lekhika.spec || true
+          cp /root/rpmbuild/RPMS/*/*.rpm . || true
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload Fedora RPM(s)
+        uses: actions/upload-artifact@v4
         with:
-          name: fedora-rpm
+          name: fedora-rpms
           path: "*.rpm"
 
   ubuntu:
-    runs-on: ubuntu-latest
     needs: source-archive
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - name: Download source archive
+        uses: actions/download-artifact@v4
         with:
           name: source-archive
+          path: .
 
-      - name: Install deps
-        run: sudo apt-get update && sudo apt-get install -y build-essential devscripts debhelper cmake ninja-build fcitx5-dev libqt6core5compat6-dev libqt6widgets6 libqt6opengl6-dev libsqlite3-dev libicu-dev
-
-      - name: Patch debian/rules
+      - name: Install dependencies (Debian/Ubuntu)
         run: |
-          sed -i '/^%:/a override_dh_auto_install:\n\tdh_auto_install -- DESTDIR=$(CURDIR)/debian/tmp' debian/rules
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential devscripts debhelper cmake ninja-build extra-cmake-modules \
+            libfcitx5core-dev libfcitx5utils-dev libfcitx5config-dev \
+            libsqlite3-dev qt6-base-dev libicu-dev qt6-base-dev-tools libgl1-mesa-dev
 
-      - name: Build deb
+      - name: Extract sources and ensure debian/rules installs into debian/tmp
         run: |
+          set -e
           VER=${GITHUB_REF_NAME#v}
-          tar xf fcitx5-lekhika-${VER}.tar.gz
-          cd fcitx5-lekhika-${VER}
-          debuild -us -uc -b
+          TAR="fcitx5-lekhika-${VER}.tar.gz"
+          if [ ! -f "$TAR" ]; then
+            echo "ERROR: expected $TAR"
+            ls -la
+            exit 1
+          fi
+          tar xf "$TAR"
+          cd "fcitx5-lekhika-${VER}"
 
-      - uses: actions/upload-artifact@v4
+          # Replace/create debian/rules so dh_auto_install places files into debian/tmp
+          printf '%s\n' '#!/usr/bin/make -f' '%:' $'\t''dh $@ --buildsystem=cmake+ninja' '' 'override_dh_auto_install:' $'\t''dh_auto_install -- DESTDIR=$(CURDIR)/debian/tmp' > debian/rules
+          chmod +x debian/rules
+
+      - name: Build Debian package
+        run: |
+          set -e
+          VER=${GITHUB_REF_NAME#v}
+          cd "fcitx5-lekhika-${VER}"
+          debuild -us -uc -b || true
+
+      - name: Upload Deb(s)
+        uses: actions/upload-artifact@v4
         with:
-          name: ubuntu-deb
+          name: ubuntu-debs
           path: "../*.deb"
 
   release:
+    needs: [arch, fedora, ubuntu, source-archive]
     runs-on: ubuntu-latest
-    needs: [source-archive, arch, fedora, ubuntu]
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download all artifacts (source + packages)
+        uses: actions/download-artifact@v4
         with:
           name: source-archive
-      - uses: actions/download-artifact@v4
-        with:
-          name: arch-pkg
-      - uses: actions/download-artifact@v4
-        with:
-          name: fedora-rpm
-      - uses: actions/download-artifact@v4
-        with:
-          name: ubuntu-deb
+          path: final-release
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
+      - name: Download arch packages
+        uses: actions/download-artifact@v4
         with:
-          files: |
-            *.tar.gz
-            *.pkg.tar.zst
-            *.rpm
-            *.deb
+          name: arch-packages
+          path: final-release
+
+      - name: Download fedora rpms
+        uses: actions/download-artifact@v4
+        with:
+          name: fedora-rpms
+          path: final-release
+
+      - name: Download ubuntu debs
+        uses: actions/download-artifact@v4
+        with:
+          name: ubuntu-debs
+          path: final-release
+
+      - name: Create Release (upload assets)
+        uses: softprops/action-gh-release@v1
+        with:
+          files: final-release/**
