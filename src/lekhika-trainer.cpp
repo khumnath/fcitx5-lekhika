@@ -23,7 +23,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>
  *******************************************************************/
-#include "lekhika_core.h"
+#include <lekhika/lekhika_core.h>
 
 #include <QApplication>
 #include <QCheckBox>
@@ -61,9 +61,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>
 #include <string>
 #include <algorithm>
 
-#include <unicode/brkiter.h>
-#include <unicode/uchar.h>
 #include <unicode/unistr.h>
+#include <unicode/brkiter.h>
+#include <unicode/locid.h>
 
 #include <QtConcurrent/QtConcurrent>
 #include <QFuture>
@@ -71,86 +71,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>
 #ifdef HAVE_SQLITE3
 // Use python script(lekhika-trainer.py) to add words in db if simplicity is perfered.
 
-  /* ---------------------------------------------------------- */
- /* Helper to validate Devanagari grapheme clusters            */
-/* ---------------------------------------------------------- */
-
-inline bool isDependentVowelSign(UChar32 c) { return c >= 0x093E && c <= 0x094C; }
-inline bool isDevanagariDigit(UChar32 c) { return c >= 0x0966 && c <= 0x096F; }
-inline bool isASCII(unsigned char c) { return c < 0x80; }
-bool isValidDevanagariWord(const icu::UnicodeString &u) {
-    if (u.isEmpty()) return false;
-
-    UErrorCode status = U_ZERO_ERROR;
-    std::unique_ptr<icu::BreakIterator> bi(
-        icu::BreakIterator::createCharacterInstance(icu::Locale::getUS(), status)
-        );
-    if (U_FAILURE(status)) return false;
-
-    bi->setText(u);
-
-    int32_t clusterCount = 0;
-    bool firstClusterChecked = false;
-
-    for (int32_t start = bi->first(), end = bi->next();
-         end != icu::BreakIterator::DONE;
-         start = end, end = bi->next())
-    {
-        clusterCount++;
-        icu::UnicodeString cluster = u.tempSubStringBetween(start, end);
-        if (cluster.isEmpty()) continue;
-        UChar32 firstCharOfCluster = cluster.char32At(0);
-
-        // Reject non-Devanagari, digits, or joiners.
-        if (isDevanagariDigit(firstCharOfCluster) || firstCharOfCluster == 0x200C || firstCharOfCluster == 0x200D) return false;
-        if (firstCharOfCluster < 0x0900 || firstCharOfCluster > 0x097F) return false;
-
-        bool isIndependentVowel = (firstCharOfCluster >= 0x0904 && firstCharOfCluster <= 0x0914);
-
-        if (!firstClusterChecked) {
-            firstClusterChecked = true;
-            bool isConsonant = (firstCharOfCluster >= 0x0915 && firstCharOfCluster <= 0x0939);
-            // The first character of a word must be a consonant, an independent vowel, or Om.
-            if (!(isIndependentVowel || isConsonant) || isDependentVowelSign(firstCharOfCluster))
-                return false;
-        } else {
-            // Any subsequent cluster cannot start with an independent vowel.
-            if (isIndependentVowel) return false;
-        }
-
-        // Check for orphaned modifiers and invalid sequences within the cluster
-        bool hasBase = false;
-        UChar32 prevChar = 0; // Keep track of the previous character
-        for (int32_t i = 0; i < cluster.length(); ++i) {
-            UChar32 c = cluster.char32At(i);
-            bool isCurrentCharIndependentVowel = (c >= 0x0904 && c <= 0x0914);
-
-            // RULE: An independent vowel cannot follow a Halant.
-            if (prevChar == 0x094D && isCurrentCharIndependentVowel) {
-                return false;
-            }
-
-            if ((c >= 0x0904 && c <= 0x0914) || (c >= 0x0915 && c <= 0x0939) || c == 0x0950) {
-                hasBase = true;
-            }
-            // RULE: An orphaned dependent vowel sign (matra) is invalid.
-            if (isDependentVowelSign(c) && !hasBase) return false;
-
-            prevChar = c;
-        }
-    }
-
-    // A word should not end with a Halant/Virama
-    if (!u.isEmpty() && u.char32At(u.length() - 1) == 0x094D) {
-        return false;
-    }
-
-    return clusterCount > 0;
-}
-
-  /* ---------------------------------------------------------- */
- /* Multithreaded Processing Functions                         */
-/* ---------------------------------------------------------- */
 
 std::vector<std::string> validateWordsChunk(const std::vector<icu::UnicodeString> &tokens, std::atomic<bool> *stop)
 {
@@ -160,21 +80,18 @@ std::vector<std::string> validateWordsChunk(const std::vector<icu::UnicodeString
         if (*stop) {
             break;
         }
-        if (isValidDevanagariWord(token)) {
-            std::string word;
-            token.toUTF8String(word);
+        std::string word;
+        token.toUTF8String(word);
+        if (isValidDevanagariWord(word)) {
             validWords.push_back(word);
         }
     }
     return validWords;
 }
-
-  /* ---------------------------------------------------------- */
- /* Worker: learn file and log actions                         */
 /* ---------------------------------------------------------- */
-static void learnWorker(const QString &filePath,
-                        QPlainTextEdit *log,
-                        std::atomic<bool> *stop)
+/* Worker: learn file and log actions                         */
+/* ---------------------------------------------------------- */
+static void learnWorker(const QString &filePath, QPlainTextEdit *log, std::atomic<bool> *stop)
 {
     std::ifstream in(filePath.toLocal8Bit().constData(), std::ios::binary);
     if (!in) {
@@ -182,21 +99,14 @@ static void learnWorker(const QString &filePath,
         return;
     }
 
-    //  Get file size and calculate total chunks
     in.seekg(0, std::ios::end);
     const long long fileSize = in.tellg();
     in.seekg(0, std::ios::beg);
 
-    const size_t targetChunkSize = 15 * 1024 * 1024; // 15MB
-    // Use the smaller of the file size or the target chunk size, but don't use a zero-size chunk.
-    size_t chunkSize = targetChunkSize;
-    if (fileSize > 0 && static_cast<size_t>(fileSize) < targetChunkSize) {
-        chunkSize = fileSize; // If file is smaller, use its size as the one and only chunk
-    }
+    const size_t chunkSize = 15 * 1024 * 1024; // 15MB chunks
     const int totalChunks = (fileSize > 0 && chunkSize > 0) ? (fileSize + chunkSize - 1) / chunkSize : 0;
     const int threadCount = QThread::idealThreadCount();
 
-    // Initial log
     QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection, Q_ARG(QString,
                                                                                   QString("Starting job...\n"
                                                                                           "  - File: %1\n"
@@ -213,22 +123,16 @@ static void learnWorker(const QString &filePath,
     std::vector<char> buffer(chunkSize);
     std::string leftover;
     long long totalValidWordsFound = 0;
-    long long totalInvalidWordsFound = 0;
-    int chunkCount = 0;
-    int added = 0, skipped = 0;
+    int added = 0;
     bool dbError = false;
-
     DictionaryManager dm;
 
-    while (in.read(buffer.data(), chunkSize) || in.gcount() > 0) {
+    for (int chunkCount = 1; in.read(buffer.data(), chunkSize) || in.gcount() > 0; ++chunkCount) {
         if (*stop || dbError) break;
 
-        chunkCount++;
-        size_t bytesRead = in.gcount();
-        QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection, Q_ARG(QString,
-                                                                                      QString("Processing chunk %1 of %2...").arg(chunkCount).arg(totalChunks)));
+        QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection, Q_ARG(QString, QString("Processing chunk %1 of %2...").arg(chunkCount).arg(totalChunks)));
 
-        std::string currentChunk(buffer.data(), bytesRead);
+        std::string currentChunk(buffer.data(), in.gcount());
         currentChunk.insert(0, leftover);
         leftover.clear();
 
@@ -241,6 +145,7 @@ static void learnWorker(const QString &filePath,
         }
 
         icu::UnicodeString u_chunk = icu::UnicodeString::fromUTF8(currentChunk);
+
         UErrorCode status = U_ZERO_ERROR;
         std::unique_ptr<icu::BreakIterator> wi(icu::BreakIterator::createWordInstance(icu::Locale::getUS(), status));
         if (U_FAILURE(status)) continue;
@@ -249,16 +154,11 @@ static void learnWorker(const QString &filePath,
         std::vector<icu::UnicodeString> chunkTokens;
         for (int32_t start = wi->first(), end = wi->next(); end != icu::BreakIterator::DONE; start = end, end = wi->next()) {
             icu::UnicodeString token = u_chunk.tempSubStringBetween(start, end);
-            std::string utf8First;
-            token.tempSubStringBetween(0, 1).toUTF8String(utf8First);
-            if (!token.isEmpty() && (utf8First.empty() || !isASCII(utf8First[0]))) {
-                chunkTokens.push_back(token);
-            }
+            chunkTokens.push_back(token);
         }
-        u_chunk.remove();
 
         std::vector<std::vector<icu::UnicodeString>> chunksForThreads(threadCount);
-        for (size_t i = 0; i < chunkTokens.size(); ++i) {
+        for(size_t i = 0; i < chunkTokens.size(); ++i) {
             chunksForThreads[i % threadCount].push_back(chunkTokens[i]);
         }
 
@@ -270,71 +170,40 @@ static void learnWorker(const QString &filePath,
         }
 
         std::vector<std::string> chunkValidWords;
-        for (auto& future : futures) {
+        for(auto& future : futures) {
             future.waitForFinished();
-            if (*stop) break;
+            if(*stop) break;
             auto result = future.result();
             chunkValidWords.insert(chunkValidWords.end(), result.begin(), result.end());
         }
+
         if (*stop) break;
 
-        long long invalidInChunk = chunkTokens.size() - chunkValidWords.size();
-        totalInvalidWordsFound += invalidInChunk;
-        totalValidWordsFound += chunkValidWords.size();
-
-        if (!chunkValidWords.empty()) {
-            QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection, Q_ARG(QString,
-                                                                                          QString("  -> Found %1 valid words (%2 invalid) in chunk %3. Committing to database...").arg(chunkValidWords.size()).arg(invalidInChunk).arg(chunkCount)));
-
-            try {
-                dm.beginTransaction();
-                // Write this chunk's words to the DB transaction
-                for (const auto& word : chunkValidWords) {
-                    int freq = dm.getWordFrequency(word);
-                    dm.addWord(word);
-                    if (freq > 0) skipped++;
-                    else added++;
-                }
-                dm.commitTransaction();
-                QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection, Q_ARG(QString,
-                                                                                              QString("  -> Commit successful. Total valid words processed so far: %1.").arg(totalValidWordsFound)));
-            } catch (const std::exception& e) {
-                dm.rollbackTransaction();
-                dbError = true;
-                QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection, Q_ARG(QString,
-                                                                                              QString("  -> DATABASE ERROR on chunk %1: %2. Aborting.").arg(chunkCount).arg(e.what())));
+        // Commit valid words to the database in a transaction
+        try {
+            dm.beginTransaction();
+            for(const auto& word : chunkValidWords) {
+                dm.addWord(word);
+                added++;
             }
-        } else {
-            QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection, Q_ARG(QString,
-                                                                                          QString("  -> No new valid words found in chunk %1.").arg(chunkCount)));
+            dm.commitTransaction();
+            totalValidWordsFound += chunkValidWords.size();
+        } catch (const std::exception& e) {
+            dm.rollbackTransaction();
+            dbError = true;
+            QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection, Q_ARG(QString, QString("Database error: %1. Aborting.").arg(e.what())));
         }
     }
 
-    if (*stop) {
-        QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection, Q_ARG(QString, "\nOperation cancelled by user."));
-        return;
-    }
-
-    if (dbError) {
-        QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection, Q_ARG(QString, "\nOperation failed due to a database error."));
-        return;
-    }
-
-    QString summary = QString("\nFinished:\n"
-                              "  - Valid words found: %1\n"
-                              "  - Invalid/Skipped tokens: %2\n"
-                              "  - Added to DB: %3\n"
-                              "  - Existing in DB (frequency updated): %4")
-                          .arg(totalValidWordsFound)
-                          .arg(totalInvalidWordsFound)
-                          .arg(added)
-                          .arg(skipped);
+    // Final summary
+    QString summary = QString("\nFinished.\n  - Total valid words found: %1\n  - Added to DB: %2").arg(totalValidWordsFound).arg(added);
     QMetaObject::invokeMethod(log, "appendPlainText", Qt::QueuedConnection, Q_ARG(QString, summary));
+
 }
 
 
-  /* ---------------------------------------------------------- */
- /* Import Tab                                                 */
+/* ---------------------------------------------------------- */
+/* Import Tab                                                 */
 /* ---------------------------------------------------------- */
 class ImportTab : public QWidget
 {
@@ -425,8 +294,8 @@ private:
     std::function<void()> onDatabaseUpdate_;
 };
 
-  /* ----------------------------------------------------------- */
- /* DB Editor Tab                                               */
+/* ----------------------------------------------------------- */
+/* DB Editor Tab                                               */
 /* ----------------------------------------------------------- */
 class DbEditorTab : public QWidget
 {
@@ -454,9 +323,11 @@ public:
         auto *searchLay = new QHBoxLayout;
         searchEdit_ = new QLineEdit;
         searchEdit_->setPlaceholderText("Search for a word (Latin or Devanagari)...");
+        searchBtn_ = new QPushButton("Search");
         clearSearchBtn_ = new QPushButton("Clear");
         searchLay->addWidget(new QLabel("Search:"));
         searchLay->addWidget(searchEdit_);
+        searchLay->addWidget(searchBtn_);
         searchLay->addWidget(clearSearchBtn_);
 
         table = new QTableWidget(0, 2);
@@ -495,8 +366,9 @@ public:
         connect(table->selectionModel(), &QItemSelectionModel::selectionChanged,
                 this, &DbEditorTab::onSelectionChanged);
         connect(table->verticalScrollBar(), &QScrollBar::valueChanged, this, &DbEditorTab::onScroll);
-        connect(searchEdit_, &QLineEdit::textChanged, this, &DbEditorTab::onSearchTextChanged);
-        connect(clearSearchBtn_, &QPushButton::clicked, this, [this](){ searchEdit_->clear(); });
+        connect(searchBtn_, &QPushButton::clicked, this, &DbEditorTab::performSearch);
+        connect(searchEdit_, &QLineEdit::returnPressed, this, &DbEditorTab::performSearch);
+        connect(clearSearchBtn_, &QPushButton::clicked, this, &DbEditorTab::clearSearch);
     }
 
     void setOnDatabaseUpdateCallback(std::function<void()> callback) {
@@ -504,10 +376,10 @@ public:
     }
 
 private:
-    void onSearchTextChanged(const QString &text) {
+    void performSearch() {
+        const QString text = searchEdit_->text();
         if (text.isEmpty()) {
-            m_isSearchActive = false;
-            reload();
+            clearSearch();
             return;
         }
 
@@ -537,6 +409,12 @@ private:
         log->appendPlainText(QString("Found %1 match(es).").arg(words.size()));
     }
 
+    void clearSearch() {
+        searchEdit_->clear();
+        m_isSearchActive = false;
+        reload();
+    }
+
     void onSortColumnChanged(int logicalIndex) {
         m_currentSortColumn = logicalIndex;
         m_currentSortOrder = table->horizontalHeader()->sortIndicatorOrder();
@@ -550,7 +428,7 @@ private:
 
     void reload() {
         if (m_isSearchActive) {
-            onSearchTextChanged(searchEdit_->text());
+            performSearch();
             return;
         }
         log->clear();
@@ -696,7 +574,7 @@ private:
 
 private:
     QTableWidget *table;
-    QPushButton *reloadBtn, *newBtn, *delBtn, *resetBtn, *editBtn, *clearSearchBtn_;
+    QPushButton *reloadBtn, *newBtn, *delBtn, *resetBtn, *editBtn, *searchBtn_, *clearSearchBtn_;
     QLineEdit *searchEdit_;
     QPlainTextEdit *log;
     std::function<void()> onDatabaseUpdate_ = nullptr;
@@ -708,8 +586,8 @@ private:
     Qt::SortOrder m_currentSortOrder = Qt::AscendingOrder;
 };
 
-  /* ---------------------------------------------------------- */
- /* Test Tab                                                   */
+/* ---------------------------------------------------------- */
+/* Test Tab                                                   */
 /* ---------------------------------------------------------- */
 class TestTab : public QWidget
 {
@@ -728,6 +606,7 @@ public:
         enableSymbols_         = new QCheckBox;
         enableSuggestions_     = new QCheckBox;
         enableLearning_        = new QCheckBox;
+        enableLearning_->setEnabled(false);
         suggestionLimit_       = new QSpinBox;
         suggestionLimit_->setRange(1, 100);
 
@@ -736,7 +615,7 @@ public:
         form->addRow("Enable Indic Numbers",           enableIndicNumbers_);
         form->addRow("Enable Symbols Transliteration", enableSymbols_);
         form->addRow("Enable Suggestions",             enableSuggestions_);
-        form->addRow("Enable Dictionary Learning",     enableLearning_);
+        form->addRow("Enable Dictionary Learning(disabled)",     enableLearning_);
         form->addRow("Suggestion Limit",               suggestionLimit_);
         mainLay->addWidget(group);
 
@@ -828,8 +707,8 @@ private:
     QPlainTextEdit *outputText_;
 };
 
-  /* ---------------------------------------------------------- */
- /* Help Tab                                                   */
+/* ---------------------------------------------------------- */
+/* Help Tab                                                   */
 /* ---------------------------------------------------------- */
 class HelpTab : public QWidget
 {
@@ -867,7 +746,7 @@ public:
          </ol>
 
          <h2 style="font-size: 1.2em; font-weight: 600; color: #34495e;">Database Location</h2>
-         <p>Your dictionary: <code style="background: #00f5f5; padding: 2px 4px; border-radius: 3px; font-size: 0.95em;">~/.local/share/fcitx5-lekhika/lekhikadict.akshardb</code></p>
+         <p>Your dictionary is stored at the path used by the running DictionaryManager instance (displayed in the status bar).</p>
 
          <hr style="border: 0; border-top: 1px solid #eee;">
 
@@ -879,15 +758,19 @@ public:
         helpContent_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
         helpContent_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
         mainLay->addWidget(helpContent_, 1);
-        dwninfo = new QLabel("If you want a head start, you can download a dictionary with pre trained common words.");
+
+        dwninfo = new QLabel("If you want a head start, you can download a dictionary with pre-trained common words.");
         dwninfo->setWordWrap(true);
         dwninfo->setStyleSheet("color: red;");
+
         auto *group = new QGroupBox("");
         auto *groupLay = new QVBoxLayout(group);
         groupLay->addWidget(dwninfo);
+
         downloadBtn_ = new QPushButton("Download and Replace Database");
         stopDownloadBtn_ = new QPushButton("Stop Download");
         stopDownloadBtn_->setVisible(false);
+
         log_ = new QPlainTextEdit;
         log_->setReadOnly(true);
         log_->setMaximumHeight(80);
@@ -931,17 +814,6 @@ private:
         }
     }
 
-    QLabel *dwninfo;
-    QTextEdit *helpContent_;
-    QPushButton *downloadBtn_;
-    QPushButton *stopDownloadBtn_;
-    QPlainTextEdit *log_;
-    QNetworkAccessManager *netManager_;
-    QNetworkReply *m_currentReply = nullptr;
-    std::function<void()> onDatabaseUpdate_ = nullptr;
-    QTimer *m_downloadTimer = nullptr;
-    bool m_userStopped = false;
-
     void downloadDatabase()
     {
         const QString warningText =
@@ -968,21 +840,39 @@ private:
         stopDownloadBtn_->setVisible(true);
         m_userStopped = false;
 
-        QString dirPath = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-                          + QLatin1String("/fcitx5-lekhika");
-        QDir dir(dirPath);
-        if (!dir.exists() && !dir.mkpath(".")) {
-            log_->appendPlainText("Error: could not create " + dirPath);
-            downloadBtn_->setEnabled(true);
-            stopDownloadBtn_->setVisible(false);
-            return;
+        // ==== Derive the real DB path the same way status bar does ====
+        QString localFile;
+        {
+            DictionaryManager dm;
+            auto info = dm.getDatabaseInfo();
+            if (info.count("db_path") && !info["db_path"].empty()) {
+                QString dbPath = QString::fromStdString(info["db_path"]);
+                if (dbPath.startsWith("~")) {
+                    dbPath.replace(0, 1, QDir::homePath());  // expand '~' to real home dir
+                }
+                localFile = QDir::toNativeSeparators(dbPath);
+            }
         }
 
-        const QString localFile = dirPath + QLatin1String("/lekhikadict.akshardb");
+        // Ensure parent directory exists
+        QFileInfo fi(localFile);
+        QDir parentDir = fi.dir();
+        if (!parentDir.exists()) {
+            if (!parentDir.mkpath(".")) {
+                log_->appendPlainText("Error: could not create directory " + parentDir.absolutePath());
+                downloadBtn_->setEnabled(true);
+                stopDownloadBtn_->setVisible(false);
+                return;
+            }
+        }
+
         const QUrl url("https://github.com/khumnath/fcitx5-lekhika/releases/download/dictionary/lekhikadict.akshardb");
         QNetworkRequest req(url);
         m_currentReply = netManager_->get(req);
         m_downloadTimer->start(15000); // 15 second timeout
+
+        // capture localFile by value for lambdas
+        const QString localFileCopy = localFile;
 
         connect(m_currentReply, &QNetworkReply::downloadProgress, this, [this](qint64 bytesReceived, qint64 bytesTotal) {
             m_downloadTimer->start(15000); // Reset timer on progress
@@ -1005,7 +895,7 @@ private:
             }
         });
 
-        connect(m_currentReply, &QNetworkReply::finished, this, [this, localFile]() {
+        connect(m_currentReply, &QNetworkReply::finished, this, [this, localFileCopy]() {
             m_downloadTimer->stop();
 
             QNetworkReply::NetworkError error = m_currentReply->error();
@@ -1018,7 +908,7 @@ private:
             m_currentReply->deleteLater();
             m_currentReply = nullptr;
 
-            QMetaObject::invokeMethod(this, [this, error, errorString, data, localFile]() {
+            QMetaObject::invokeMethod(this, [this, error, errorString, data, localFileCopy]() {
                     QTextCursor cursor = log_->textCursor();
                     cursor.movePosition(QTextCursor::End);
                     cursor.select(QTextCursor::BlockUnderCursor);
@@ -1030,8 +920,7 @@ private:
                     }
 
                     if (error == QNetworkReply::OperationCanceledError) {
-                        if (!m_userStopped) {
-                        } else {
+                        if (m_userStopped) {
                             log_->appendPlainText("Download cancelled by user.");
                         }
                     } else if (error != QNetworkReply::NoError) {
@@ -1045,7 +934,7 @@ private:
                             detail = QString("Network error: %1").arg(errorString);
                         log_->appendPlainText("Download failed. " + detail);
                     } else {
-                        QString tempFile = localFile + ".tmp";
+                        QString tempFile = localFileCopy + ".tmp";
                         QFile file(tempFile);
                         if (!file.open(QIODevice::WriteOnly)) {
                             log_->appendPlainText(QString("Error: cannot write temporary file %1").arg(tempFile));
@@ -1053,8 +942,8 @@ private:
                             file.write(data);
                             file.close();
 
-                            QFile::remove(localFile);
-                            if (QFile::rename(tempFile, localFile)) {
+                            QFile::remove(localFileCopy);
+                            if (QFile::rename(tempFile, localFileCopy)) {
                                 log_->appendPlainText("Success! Dictionary updated.");
                                 log_->appendPlainText("Please restart fcitx5 to use the new dictionary. dictionary can be tested on settings tab without restart this application. ");
                                 if (onDatabaseUpdate_) onDatabaseUpdate_();
@@ -1069,11 +958,22 @@ private:
                 }, Qt::QueuedConnection);
         });
     }
+
+    QLabel *dwninfo;
+    QTextEdit *helpContent_;
+    QPushButton *downloadBtn_;
+    QPushButton *stopDownloadBtn_;
+    QPlainTextEdit *log_;
+    QNetworkAccessManager *netManager_;
+    QNetworkReply *m_currentReply = nullptr;
+    std::function<void()> onDatabaseUpdate_ = nullptr;
+    QTimer *m_downloadTimer = nullptr;
+    bool m_userStopped = false;
 };
 
 
-  /* ---------------------------------------------------------- */
- /* Main Window                                                */
+/* ---------------------------------------------------------- */
+/* Main Window                                                */
 /* ---------------------------------------------------------- */
 class MainWin : public QMainWindow
 {
@@ -1137,36 +1037,36 @@ private:
         auto info = dm.getDatabaseInfo();
 
         QString wordCount = "N/A";
-        QString lang      = "N/A";
+       // QString lang      = "N/A";
         QString path      = "N/A";
-        QString engine    = "Error";
+        QString Db    = "Error";
         QString version   = "N/A";
         QString date      = "N/A";
+        QString libversion = "N/A";
 
         if (info.count("word_count"))       wordCount = QString::fromStdString(info["word_count"]);
-        if (info.count("language"))         lang      = QString::fromStdString(info["language"]).toUpper();
+        //if (info.count("language"))         lang      = QString::fromStdString(info["language"]).toUpper();
         if (info.count("db_path"))          path      = QDir::toNativeSeparators(QString::fromStdString(info["db_path"]));
-        if (info.count("engine"))           engine    = QString::fromStdString(info["engine"]);
+        if (info.count("Db"))           Db    = QString::fromStdString(info["Db"]);
         if (info.count("format_version"))   version   = QString::fromStdString(info["format_version"]);
         if (info.count("created_at"))           date      = QString::fromStdString(info["created_at"]);
+        if (LEKHIKA_VERSION)                    libversion = QString::fromStdString(LEKHIKA_VERSION);
 
         QString infoText = QString(
                                "<style>"
                                "  div, span, b { margin: 0; padding: 0; line-height: 1.0; font-size: 100%; }"
                                "</style>"
                                "<div>"
-                               "Engine: <b>%1</b> <span style='color:#7f8c8d;'>v%2</span> | "
-                               "Words: <span style='color:orange; font-weight:bold;'>%3</span> | "
-                               "Lang: <b>%4</b> | "
+                               "Db: <b>%1</b> <span style='color:#7f8c8d;'>v%2</span> | <span>Library: <b>%3<b/></span> | "
+                               "Words: <span style='color:orange; font-weight:bold;'>%4</span> | "
                                "created at: %5"
                                "</div>"
-                               ).arg(engine, version, wordCount, lang, date);
+                               ).arg(Db, version, libversion, wordCount, date);
         auto *infoLbl = new QLabel;
         infoLbl->setTextFormat(Qt::RichText);
         infoLbl->setText(infoText);
         infoLbl->setAlignment(Qt::AlignCenter);
         infoLbl->setContentsMargins(0, 0, 0, 0);
-
         auto *pathLbl = new QLabel;
         pathLbl->setTextFormat(Qt::RichText);
         pathLbl->setContentsMargins(0, 0, 0, 0);

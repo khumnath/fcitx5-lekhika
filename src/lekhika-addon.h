@@ -8,7 +8,7 @@
 #include <fcitx/instance.h>
 #include <fcitx/action.h>
 
-#include "lekhika_core.h"
+#include <lekhika/lekhika_core.h>
 
 #include <memory>
 #include <string>

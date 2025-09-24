@@ -1,7 +1,6 @@
 // lekhika_addon.cpp
 
 #include "lekhika-addon.h"
-#include "lekhika_core.h"
 
 #include <fcitx-config/iniparser.h>
 #include <fcitx-utils/fs.h>
@@ -447,8 +446,8 @@ void NepaliRomanEngine::updateCandidates(InputContext *ic,
 #endif
 }
 
-//=============================================================================//
-// Factory Registration                                                         //
+  //=============================================================================//
+ // Factory Registration                                                        //
 //=============================================================================//
 
 class NepaliRomanEngineFactory : public AddonFactory {
