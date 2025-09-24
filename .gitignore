@@ -27,7 +27,7 @@ Makefile
 # CLion or JetBrains IDEs
 .idea/
 
-# macOS
+# macOS files
 .DS_Store
 
 # Tarball or release archives
