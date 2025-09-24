@@ -23,20 +23,23 @@ jobs:
         with:
           submodules: 'recursive'
 
-      - name: Install distro dependencies
+      - name: Install distro dependencies and recent CMake
         run: |
+          # Add Kitware APT repository to get a version of CMake that supports FetchContent
+          sudo apt-get update
+          sudo apt-get install -y wget gpg
+          wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | sudo tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
+          echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ $(. /etc/os-release && echo $VERSION_CODENAME) main' | sudo tee /etc/apt/sources.list.d/kitware.list >/dev/null
+          
+          # Update package list again and install all build dependencies
           sudo apt-get update
           sudo apt-get install -y \
+            cmake \
             build-essential \
             ninja-build extra-cmake-modules \
             libfcitx5core-dev libfcitx5utils-dev libfcitx5config-dev \
             libsqlite3-dev qt6-base-dev qt6-base-dev-tools libicu-dev \
             gettext appstream
-
-      - name: Install recent CMake
-        uses: kitware/cmake-action@v2
-        with:
-          version: ">=3.14"
 
       - name: Configure
         run: |
