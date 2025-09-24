@@ -11,20 +11,22 @@ jobs:
   source:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.version.outputs.version }}
+      version: ${{ steps.src.outputs.version }}
     steps:
       - name: Checkout repository and submodules
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: 'recursive'
-      - id: version
-        run: echo "version=$(cat version.txt)" >> "$GITHUB_OUTPUT"
       - name: Update metainfo
         run: ./update-metainfo.sh
-      - name: Create source tarball
+      - name: Create source tarball and set version
+        id: src
         run: |
+          # Derive version from the Git tag (e.g., v2.1.1 becomes 2.1.1)
           VER=${GITHUB_REF_NAME#v}
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+
           TAR="fcitx5-lekhika-${VER}.tar.gz"
           # Create a source tarball that includes the submodule content
           git archive --format=tar --prefix="fcitx5-lekhika-${VER}/" HEAD | (cd liblekhika && git archive --format=tar --prefix="fcitx5-lekhika-${VER}/liblekhika/" HEAD) | gzip > "$TAR"
@@ -94,7 +96,7 @@ jobs:
       - run: |
           dnf clean all
           dnf install -y rpm-build cmake ninja-build gcc-c++ \
-            fcitx5-devel qt6-qtbase-devel sqlite-devel libicu-devel qt6-qtwidgets-devel
+            fcitx5-devel qt6-qtbase-devel sqlite-devel libicu-devel
       - uses: actions/download-artifact@v4
         with:
           name: source-tarball
@@ -110,7 +112,7 @@ jobs:
             echo "Summary:        Lekhika input method for Fcitx5 (includes trainer)"
             echo "License:        GPL-3.0+"
             echo "Source0:        fcitx5-lekhika-%{version}.tar.gz"
-            echo "BuildRequires:  cmake, ninja-build, gcc-c++, fcitx5-devel, qt6-qtbase-devel, sqlite-devel, libicu-devel, qt6-qtwidgets-devel"
+            echo "BuildRequires:  cmake, ninja-build, gcc-c++, fcitx5-devel, qt6-qtbase-devel, sqlite-devel, libicu-devel"
             echo "Requires:       fcitx5-qt, sqlite, libicu, qt6-qtwidgets"
             echo "%description"
             echo "Lekhika input-method addon for Fcitx5, with bundled liblekhika and trainer GUI."
@@ -142,7 +144,7 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
-      - run: pacman -Syu --noconfirm base-devel cmake ninja fcitx5-qt sqlite qt6-base icu qt6-widgets
+      - run: pacman -Syu --noconfirm base-devel cmake ninja fcitx5-qt sqlite qt6-base icu
       - uses: actions/download-artifact@v4
         with:
           name: source-tarball
@@ -158,7 +160,7 @@ jobs:
             echo "arch=('x86_64')"
             echo "url=\"https://github.com/${GITHUB_REPOSITORY}\""
             echo "license=('GPL3')"
-            echo "depends=(\"fcitx5-qt\" \"sqlite\" \"icu\" \"qt6-widgets\")"
+            echo "depends=(\"fcitx5-qt\" \"sqlite\" \"icu\" \"qt6-base\")"
             echo "makedepends=('cmake' 'ninja')"
             echo "source=(\"fcitx5-lekhika-\${pkgver}.tar.gz\")"
             echo "sha256sums=(\"SKIP\")"
