@@ -47,54 +47,35 @@ jobs:
             build-essential dpkg-dev debhelper devscripts \
             cmake ninja-build extra-cmake-modules \
             libfcitx5core-dev libfcitx5utils-dev libfcitx5config-dev \
-            libsqlite3-dev qt6-base-dev libicu-dev
+            libsqlite3-dev qt6-base-dev libicu-dev qt6-base-dev-tools
       - uses: actions/download-artifact@v4
         with:
           name: source-tarball
       - name: Build debian package
         run: |
-          mkdir pkg && tar -xf *.tar.gz -C pkg --strip-components=1
-          cd pkg
-          mkdir -p debian
+          mkdir pkg-src && tar -xf *.tar.gz -C pkg-src --strip-components=1
+          cd pkg-src
+          
+          # Manually build and stage the project
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+          cmake --build build
+          DESTDIR=../dist cmake --install build
+          cd ..
+
+          # Manually create the debian package from the staged files
+          VER=${{ needs.source.outputs.version }}
+          mkdir -p package/DEBIAN
+          cp -r dist/* package/
           {
-            echo 'Source: fcitx5-lekhika'
-            echo 'Section: utils'
-            echo 'Priority: optional'
-            echo 'Maintainer: KHUMNATH CG<nath.khum@gmail.com>'
-            echo 'Build-Depends: debhelper-compat (= 13), cmake, ninja-build, extra-cmake-modules, libfcitx5core-dev, libfcitx5utils-dev, libfcitx5config-dev, libsqlite3-dev, qt6-base-dev, libicu-dev'
-            echo 'Standards-Version: 4.6.0'
-            echo ''
-            echo 'Package: fcitx5-lekhika'
-            echo 'Architecture: any'
-            echo 'Depends: ${shlibs:Depends}, ${misc:Depends}, libfcitx5-qt1, libsqlite3-0, libicu70 | libicu71, libqt6core6'
-            echo 'Description: Lekhika input-method addon for Fcitx5 (with bundled liblekhika)'
-            echo ''
-            echo 'Package: lekhika-trainer'
-            echo 'Architecture: any'
-            echo 'Depends: ${shlibs:Depends}, ${misc:Depends}, libqt6widgets6t64 | libqt6widgets6, fcitx5-lekhika (= ${binary:Version})'
-            echo 'Description: GUI training tool for fcitx5-lekhika'
-          } > debian/control
-          {
-            echo 'usr/lib/*/liblekhika.so.*'
-            echo 'usr/share/lekhika-core/*'
-            echo 'usr/lib/*/fcitx5/fcitx5lekhika.so'
-            echo 'usr/share/fcitx5/addon/fcitx5lekhika.conf'
-            echo 'usr/share/fcitx5/inputmethod/fcitx5lekhika.conf'
-            echo 'usr/share/metainfo/fcitx5-lekhika.metainfo.xml'
-          } > debian/fcitx5-lekhika.install
-          {
-            echo 'usr/bin/lekhika-trainer'
-            echo 'usr/share/applications/lekhika-trainer.desktop'
-            echo 'usr/share/icons/hicolor/*/apps/*'
-            echo 'usr/share/metainfo/lekhika-trainer.metainfo.xml'
-          } > debian/lekhika-trainer.install
-          printf '#!/usr/bin/make -f\n%%:\n\tdh $@ --buildsystem=cmake+ninja\noverride_dh_auto_configure:\n\tdh_auto_configure -- -DCMAKE_BUILD_TYPE=Release\noverride_dh_auto_test:\n' > debian/rules
-          chmod +x debian/rules
-          export DEBEMAIL=nath.khum@gmail.com DEBFULLNAME="KHUMNATH CG"
-          # Read version from the extracted file for robustness
-          VER=$(cat version.txt)
-          dch --create -v "${VER}-1" --package fcitx5-lekhika "CI build"
-          dpkg-buildpackage -b -uc -us
+            echo "Package: fcitx5-lekhika"
+            echo "Version: ${VER}"
+            echo "Architecture: amd64"
+            echo "Maintainer: KHUMNATH CG <nath.khum@gmail.com>"
+            echo "Description: Lekhika IME for Fcitx5 with bundled library and trainer"
+            echo "Depends: libfcitx5-qt1, libsqlite3-0, libicu70 | libicu71, libqt6widgets6"
+          } > package/DEBIAN/control
+          dpkg-deb --build package "fcitx5-lekhika_${VER}_amd64.deb"
+
       - name: Add t64 suffix for latest ubuntu build
         if: matrix.distro == 'ubuntu-latest'
         run: |
@@ -111,29 +92,28 @@ jobs:
     container: fedora:39
     steps:
       - run: |
-          # Clean cache before installing
           dnf clean all
           dnf install -y rpm-build cmake ninja-build gcc-c++ \
-            fcitx5-devel qt6-qtbase-devel sqlite-devel libicu-devel
+            fcitx5-devel qt6-qtbase-devel sqlite-devel libicu-devel qt6-qtwidgets-devel
       - uses: actions/download-artifact@v4
         with:
           name: source-tarball
       - name: Build RPM package
-        env:
-          VER: ${{ needs.source.outputs.version }}
         run: |
+          VER=${{ needs.source.outputs.version }}
           mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
           cp *.tar.gz ~/rpmbuild/SOURCES/
           {
-            echo "Name:           fcitx5-lekhika-meta"
+            echo "Name:           fcitx5-lekhika"
             echo "Version:        ${VER}"
             echo "Release:        1%{?dist}"
-            echo "Summary:        Lekhika input method for Fcitx5"
+            echo "Summary:        Lekhika input method for Fcitx5 (includes trainer)"
             echo "License:        GPL-3.0+"
             echo "Source0:        fcitx5-lekhika-%{version}.tar.gz"
             echo "BuildRequires:  cmake, ninja-build, gcc-c++, fcitx5-devel, qt6-qtbase-devel, sqlite-devel, libicu-devel, qt6-qtwidgets-devel"
+            echo "Requires:       fcitx5-qt, sqlite, libicu, qt6-qtwidgets"
             echo "%description"
-            echo "Meta package for fcitx5-lekhika."
+            echo "Lekhika input-method addon for Fcitx5, with bundled liblekhika and trainer GUI."
             echo "%prep"
             echo "%autosetup -n fcitx5-lekhika-%{version}"
             echo "%build"
@@ -141,29 +121,17 @@ jobs:
             echo "%cmake_build"
             echo "%install"
             echo "%cmake_install"
-            echo "%package -n fcitx5-lekhika"
-            echo "Summary:        Lekhika input method for Fcitx5 (with bundled liblekhika)"
-            echo "Requires:       fcitx5-qt, sqlite, libicu"
-            echo "%description -n fcitx5-lekhika"
-            echo "The core addon with its bundled runtime library."
-            echo "%files -n fcitx5-lekhika"
+            echo "%files"
             echo "%{_libdir}/liblekhika.so.*"
             echo "/usr/share/lekhika-core/*"
             echo "%{_libdir}/fcitx5/*.so"
             echo "%{_datadir}/fcitx5/*"
-            echo "%{_datadir}/metainfo/fcitx5-lekhika.metainfo.xml"
-            echo "%package -n lekhika-trainer"
-            echo "Summary:        GUI training tool for fcitx5-lekhika"
-            echo "Requires:       fcitx5-lekhika = %{version}-%{release}, qt6-qtwidgets"
-            echo "%description -n lekhika-trainer"
-            echo "A Qt-based GUI to manage the lekhika dictionary."
-            echo "%files -n lekhika-trainer"
             echo "%{_bindir}/lekhika-trainer"
             echo "%{_datadir}/applications/*.desktop"
             echo "%{_datadir}/icons/hicolor/*/apps/lekhika.*"
-            echo "%{_datadir}/metainfo/lekhika-trainer.metainfo.xml"
-          } > ~/rpmbuild/SPECS/lekhika.spec
-          rpmbuild -bb ~/rpmbuild/SPECS/lekhika.spec
+            echo "%{_datadir}/metainfo/*.xml"
+          } > ~/rpmbuild/SPECS/fcitx5-lekhika.spec
+          rpmbuild -bb ~/rpmbuild/SPECS/fcitx5-lekhika.spec
       - uses: actions/upload-artifact@v4
         with:
           name: fedora-rpms
@@ -174,8 +142,7 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
-      # Use -Syu to fully sync and update before installing
-      - run: pacman -Syu --noconfirm base-devel cmake ninja fcitx5-qt sqlite qt6-base icu
+      - run: pacman -Syu --noconfirm base-devel cmake ninja fcitx5-qt sqlite qt6-base icu qt6-widgets
       - uses: actions/download-artifact@v4
         with:
           name: source-tarball
@@ -184,12 +151,14 @@ jobs:
           useradd -m builder && mkdir arch_build && mv *.tar.gz arch_build/ && chown -R builder:builder arch_build
           sudo -u builder GITHUB_REPOSITORY=${{ github.repository }} PKGVER=${{ needs.source.outputs.version }} \
           bash -c 'cd arch_build && {
-            echo "pkgname=('fcitx5-lekhika' 'lekhika-trainer')"
+            echo "pkgname=fcitx5-lekhika"
             echo "pkgver=${PKGVER}"
             echo "pkgrel=1"
+            echo "pkgdesc=\"Lekhika input method for Fcitx5 (includes trainer)\""
             echo "arch=('x86_64')"
             echo "url=\"https://github.com/${GITHUB_REPOSITORY}\""
             echo "license=('GPL3')"
+            echo "depends=(\"fcitx5-qt\" \"sqlite\" \"icu\" \"qt6-widgets\")"
             echo "makedepends=('cmake' 'ninja')"
             echo "source=(\"fcitx5-lekhika-\${pkgver}.tar.gz\")"
             echo "sha256sums=(\"SKIP\")"
@@ -198,19 +167,10 @@ jobs:
             echo "  cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr"
             echo "  cmake --build build"
             echo "}"
-            echo "package_fcitx5-lekhika() {"
-            echo "  pkgdesc=\"Lekhika IME (with bundled liblekhika)\""
-            echo "  depends=(\"fcitx5-qt\" \"sqlite\" \"icu\")"
+            echo "package() {"
             echo "  cd \"fcitx5-lekhika-\${pkgver}/build\""
             echo "  DESTDIR=\"\$pkgdir\" cmake --install ."
-            echo "  rm -rf \"\$pkgdir/usr/bin/lekhika-trainer\" \"\$pkgdir/usr/share/applications/lekhika-trainer.desktop\" \"\$pkgdir/usr/share/metainfo/lekhika-trainer.metainfo.xml\""
             echo "  rm -rf \"\$pkgdir/usr/bin/lekhika-cli\" \"\$pkgdir/usr/include\" \"\$pkgdir/usr/lib/cmake\""
-            echo "}"
-            echo "package_lekhika-trainer() {"
-            echo "  pkgdesc=\"GUI training tool for fcitx5-lekhika\""
-            echo "  depends=(\"fcitx5-lekhika=\${pkgver}\" \"qt6-widgets\")"
-            echo "  cd \"fcitx5-lekhika-\${pkgver}/build\""
-            echo "  DESTDIR=\"\$pkgdir\" cmake --install . --component Trainer"
             echo "}"
           } > PKGBUILD && makepkg -f --noconfirm'
           mv arch_build/*.pkg.tar.zst .
@@ -229,7 +189,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake ninja-build extra-cmake-modules \
             libfcitx5core-dev libfcitx5utils-dev libfcitx5config-dev \
-            libsqlite3-dev qt6-base-dev libicu-dev
+            libsqlite3-dev qt6-base-dev libicu-dev qt6-base-dev-tools
       - uses: actions/download-artifact@v4
         with:
           name: source-tarball
@@ -259,13 +219,9 @@ jobs:
           path: final-release
       - name: Organize files and generate checksums
         run: |
-          cd final-release
           mkdir organized-release
-          mv source-tarball/* organized-release/
-          mv debian-packages-*/* organized-release/
-          mv fedora-rpms/* organized-release/
-          mv arch-packages/* organized-release/
-          mv generic-linux-tarball/* organized-release/
+          # Use find to move all artifacts into the new directory
+          find final-release -mindepth 2 -type f -exec mv {} organized-release/ \;
           cd organized-release
           sha256sum * > SHA256SUMS.txt
       - name: Generate changelog
@@ -283,7 +239,7 @@ jobs:
       - name: create GitHub release
         uses: softprops/action-gh-release@v1
         with:
-          files: final-release/organized-release/*
+          files: organized-release/*
           body_path: CHANGELOG.md
           draft: false
           prerelease: false
