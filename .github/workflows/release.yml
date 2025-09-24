@@ -52,8 +52,6 @@ jobs:
         with:
           name: source-tarball
       - name: Build debian package
-        env:
-          VER: ${{ needs.source.outputs.version }}
         run: |
           mkdir pkg && tar -xf *.tar.gz -C pkg --strip-components=1
           cd pkg
@@ -93,6 +91,8 @@ jobs:
           printf '#!/usr/bin/make -f\n%%:\n\tdh $@ --buildsystem=cmake+ninja\noverride_dh_auto_configure:\n\tdh_auto_configure -- -DCMAKE_BUILD_TYPE=Release\noverride_dh_auto_test:\n' > debian/rules
           chmod +x debian/rules
           export DEBEMAIL=nath.khum@gmail.com DEBFULLNAME="KHUMNATH CG"
+          # Read version from the extracted file for robustness
+          VER=$(cat version.txt)
           dch --create -v "${VER}-1" --package fcitx5-lekhika "CI build"
           dpkg-buildpackage -b -uc -us
       - name: Add t64 suffix for latest ubuntu build
@@ -111,15 +111,17 @@ jobs:
     container: fedora:39
     steps:
       - run: |
+          # Clean cache before installing
           dnf clean all
           dnf install -y rpm-build cmake ninja-build gcc-c++ \
-            fcitx5-devel qt6-qtbase-devel sqlite-devel libicu-devel qt6-qtwidgets-devel
+            fcitx5-devel qt6-qtbase-devel sqlite-devel libicu-devel
       - uses: actions/download-artifact@v4
         with:
           name: source-tarball
       - name: Build RPM package
+        env:
+          VER: ${{ needs.source.outputs.version }}
         run: |
-          VER=${{ needs.source.outputs.version }}
           mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
           cp *.tar.gz ~/rpmbuild/SOURCES/
           {
@@ -172,7 +174,8 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
-      - run: pacman -Syu --noconfirm base-devel cmake ninja fcitx5-qt sqlite qt6-base icu qt6-widgets
+      # Use -Syu to fully sync and update before installing
+      - run: pacman -Syu --noconfirm base-devel cmake ninja fcitx5-qt sqlite qt6-base icu
       - uses: actions/download-artifact@v4
         with:
           name: source-tarball
