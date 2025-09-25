@@ -107,6 +107,9 @@ sudo cmake --install build
 To uninstall the project later, you can run `sudo make uninstall` from within the `build` directory.
 
 ### Prebuilt Packages
+> [!NOTE]  
+>
+> build action file is deleted after try to build packages. for now user should build and install from source. see above
 
 Prebuilt packages will be available in the near future.
 
