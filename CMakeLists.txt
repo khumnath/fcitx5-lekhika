@@ -15,7 +15,6 @@ find_package(Fcitx5Utils REQUIRED)
 find_package(Fcitx5Config REQUIRED)
 find_package(SQLite3)
 find_package(liblekhika)
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets  Network)
 find_package(ICU REQUIRED COMPONENTS uc i18n)
 
 include("${FCITX_INSTALL_CMAKECONFIG_DIR}/Fcitx5Utils/Fcitx5CompilerSettings.cmake")
