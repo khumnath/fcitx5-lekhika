@@ -1,4 +1,4 @@
-[![Download count](https://img.shields.io/github/downloads/khumnath/fcitx5-lekhika/dictionary/total.svg)](https://github.com/khumnath/fcitx5-lekhika/releases/tag/dictionary)
+![Downloads](https://img.shields.io/github/downloads/khumnath/fcitx5-lekhika/dictionary/lekhikadict.akshardb.svg)
 
 > [!NOTE]  
 >
@@ -116,6 +116,9 @@ sudo cmake --install build
 To uninstall the project later, you can run `sudo make uninstall` from the `build` directory.
 
 ### Prebuilt Packages
+> [!NOTE]  
+>
+> build action file is deleted after try to build packages. for now user should build and install from source. see above
 
 Prebuilt installer packages for Debian/Ubuntu, Fedora, and Arch Linux are available in the [**Releases Section**](https://github.com/khumnath/fcitx5-lekhika/releases).
 
