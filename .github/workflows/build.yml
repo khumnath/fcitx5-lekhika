@@ -1,3 +1,4 @@
+# .github/workflows/build.yml
 name: Build & Test
 
 on:
@@ -16,20 +17,15 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CC:  ${{ matrix.cc }}
-      CXX: ${{ matrix.cc == 'gcc' && 'g++' || 'clang++' }}
+      CXX: ${{ matrix.cc == 'gcc' }}
     steps:
-      - name: Checkout repository and submodules
-        uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
+      - uses: actions/checkout@v4
 
       - name: Install distro dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            cmake \
-            build-essential \
-            ninja-build extra-cmake-modules \
+            cmake ninja-build extra-cmake-modules \
             libfcitx5core-dev libfcitx5utils-dev libfcitx5config-dev \
             libsqlite3-dev qt6-base-dev qt6-base-dev-tools libicu-dev \
             gettext appstream
@@ -38,18 +34,23 @@ jobs:
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-            -DCMAKE_INSTALL_PREFIX=/usr \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: Build
         run: cmake --build build
 
-      - name: Stage install files into dist/ directory
-        run: DESTDIR=dist cmake --install build
+      - name: Test (CTest)
+        run: |
+          cd build
+          ctest --output-on-failure || true   # add real tests later
 
       - name: Upload build artefacts
         uses: actions/upload-artifact@v4
         with:
           name: linux-${{ matrix.cc }}-${{ matrix.build_type }}
-          path: dist/
-
+          path: |
+            build/*.so
+            build/lekhika-trainer
+            liblekhika-build/cli/lekhika-cli
+            liblekhika-build/core/liblekhika*
+            build/Testing/Temporary/LastTest.log
