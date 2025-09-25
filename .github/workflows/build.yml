@@ -11,37 +11,69 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cc: [gcc, clang]
-        build_type: [Debug, Release]
+        include:
+          - cc: gcc
+            cxx: g++
+            build_type: Debug
+          - cc: gcc
+            cxx: g++
+            build_type: Release
+          - cc: clang
+            cxx: clang++
+            build_type: Debug
+          - cc: clang
+            cxx: clang++
+            build_type: Release
+
     runs-on: ubuntu-latest
     env:
-      CC:  ${{ matrix.cc }}
-      CXX: ${{ matrix.cc == 'gcc' && 'g++' || 'clang++' }}
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+
     steps:
-      - name: Checkout repository and submodules
+      - name: Checkout fcitx5-lekhika repository
         uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
 
       - name: Install distro dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            git \
             cmake \
             build-essential \
             ninja-build extra-cmake-modules \
             libfcitx5core-dev libfcitx5utils-dev libfcitx5config-dev \
-            libsqlite3-dev qt6-base-dev qt6-base-dev-tools libicu-dev \
+            libsqlite3-dev libicu-dev \
             gettext appstream
 
-      - name: Configure
+      - name: Clone liblekhika dependency
+        run: git clone https://github.com/khumnath/liblekhika.git
+
+      - name: Build and Install liblekhika
+        run: |
+          cd liblekhika
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_INSTALL_PREFIX=/usr
+          cmake --build build
+          sudo cmake --install build
+
+      - name: Update shared library cache
+        run: sudo ldconfig
+
+      - name: Test liblekhika-cli transliteration
+        run: |
+          echo "Testing lekhika-cli transliteration..."
+          lekhika-cli transliterate nepaal
+
+      - name: Configure fcitx5-lekhika
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DCMAKE_INSTALL_PREFIX=/usr \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
-      - name: Build
+      - name: Build fcitx5-lekhika
         run: cmake --build build
 
       - name: Stage install files into dist/ directory

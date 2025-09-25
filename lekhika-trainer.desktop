@@ -1,9 +1,0 @@
-[Desktop Entry]
-Name=Lekhika Trainer
-Comment=Train the Lekhika input engine with Devanagari words
-Exec=lekhika-trainer
-Icon=lekhika
-Terminal=false
-Type=Application
-Categories=Utility;Education;InputMethod;
-StartupNotify=true
