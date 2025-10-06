@@ -8,8 +8,7 @@ DATE=$(date +%Y-%m-%d)
 
 # Files to update
 FILES=(
-  "data/fcitx5-lekhika.metainfo.xml"
-  "data/lekhika-trainer.metainfo.xml"
+  "fcitx5-lekhika.metainfo.xml"
 )
 
 for FILE in "${FILES[@]}"; do
