@@ -154,8 +154,8 @@ void NepaliRomanEngine::keyEvent(const InputMethodEntry &, KeyEvent &keyEvent) {
                         .toString();
                 ic->commitString(word + " ");
                 resetState(state, ic);
-                state->navigatedInCandidates_ = false; // reset after commit
-                keyEvent.filterAndAccept(); //  Consume
+                state->navigatedInCandidates_ = false;
+                keyEvent.filterAndAccept();
                 return;
             }
         }
@@ -233,7 +233,7 @@ void NepaliRomanEngine::keyEvent(const InputMethodEntry &, KeyEvent &keyEvent) {
                     candidateList->candidate(candidateList->cursorIndex())
                         .text()
                         .toString();
-                ic->commitString(word);
+                ic->commitString(word + " ");
                 resetState(state, ic);
                 committed = true;
             }
@@ -256,17 +256,14 @@ void NepaliRomanEngine::keyEvent(const InputMethodEntry &, KeyEvent &keyEvent) {
         if (committed) {
             keyEvent.filterAndAccept();
         }
-        // If nothing committed, key is NOT consumed → reaches app
         return;
     }
 
     // Space: commit candidate if allowed, else commit buffer or insert space
     if (sym == FcitxKey_space) {
-        if (isCandidateListVisible) {
+        if (spacecanCommitSuggestions_ && isCandidateListVisible) {
             auto candidateList = ic->inputPanel().candidateList();
-            if (candidateList &&
-                (spacecanCommitSuggestions_ || state->navigatedInCandidates_) &&
-                candidateList->cursorIndex() >= 0) {
+            if (candidateList && candidateList->cursorIndex() >= 0) {
                 const auto &word =
                     candidateList->candidate(candidateList->cursorIndex())
                         .text()
@@ -274,14 +271,14 @@ void NepaliRomanEngine::keyEvent(const InputMethodEntry &, KeyEvent &keyEvent) {
                 ic->commitString(word + " ");
                 resetState(state, ic);
                 state->navigatedInCandidates_ = false;
-                keyEvent.filterAndAccept(); // Consume
+                // Do NOT consume — let Space reach app for the space
                 return;
             }
         }
         // Fallback: commit buffer or insert space
         if (!state->buffer_.empty()) {
             std::string result = transliterator_->transliterate(state->buffer_);
-            ic->commitString(result + " ");
+            ic->commitString(result);
 #ifdef HAVE_SQLITE3
             if (dictionary_ && enableDictionaryLearning_) {
                 dictionary_->addWord(result);
@@ -291,8 +288,7 @@ void NepaliRomanEngine::keyEvent(const InputMethodEntry &, KeyEvent &keyEvent) {
             //  Do NOT consume — let Space reach app
             return;
         } else {
-            ic->commitString(" ");
-            //  Do NOT consume — let Space reach app
+            // Do NOT consume — let Space reach app
             return;
         }
     }
@@ -303,7 +299,7 @@ void NepaliRomanEngine::keyEvent(const InputMethodEntry &, KeyEvent &keyEvent) {
             ic->commitString(state->buffer_);
             resetState(state, ic);
         }
-        keyEvent.filterAndAccept(); //  Consume — IME-specific action
+        keyEvent.filterAndAccept();
         return;
     }
 
@@ -408,7 +404,7 @@ void NepaliRomanEngine::updatePreedit(InputContext *ic) {
         size_t cursor_in_preview_bytes = preview_before_cursor.length();
         preedit.append(preview_full, TextFormatFlag::Underline);
         preedit.setCursor(cursor_in_preview_bytes);
-        aux.append(state->buffer_);
+        aux.append(state->buffer_ + "⇾" + preview_before_cursor);
     }
 
     ic->inputPanel().setClientPreedit(preedit);
